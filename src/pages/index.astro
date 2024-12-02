@@ -14,7 +14,7 @@ let updates: Update[] = [];
 let errorMessage: string | null = null;
 
 try {
-  const response = await fetch(import.meta.env.SITE_URL + '/.netlify/functions/fetch-updates', {
+  const response = await fetch('/.netlify/functions/fetch-updates', {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
