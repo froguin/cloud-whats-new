@@ -5,8 +5,20 @@ import { getStore } from "@netlify/blobs";
 const CACHE_KEY = 'aws-updates';
 const CACHE_TTL = 3600; // 1시간 캐시
 
-export const handler = async (event) => {
+export const handler = async () => {
   try {
+    console.log('Function started');
+    
+    if (!process.env.NETLIFY_BLOBS_KEY) {
+      console.error('NETLIFY_BLOBS_KEY is not set');
+      throw new Error('Required environment variable NETLIFY_BLOBS_KEY is missing');
+    }
+    
+    if (!process.env.DEEPL_API_KEY) {
+      console.error('DEEPL_API_KEY is not set');
+      throw new Error('Required environment variable DEEPL_API_KEY is missing');
+    }
+
     const store = getStore();
     
     // 캐시된 데이터 확인
@@ -56,14 +68,14 @@ export const handler = async (event) => {
       body: JSON.stringify(translatedItems)
     };
   } catch (error) {
-    console.error('Error:', error);
-    return { 
-      statusCode: 500, 
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({ error: error.message }) 
+    console.error('Function error:', error);
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: '서버 오류가 발생했습니다',
+        details: error.message 
+      })
     };
   }
 };
