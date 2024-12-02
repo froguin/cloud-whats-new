@@ -1,7 +1,7 @@
-const { parse } = require('rss-to-json');
-const axios = require('axios');
+import { parse } from 'rss-to-json';
+import axios from 'axios';
 
-exports.handler = async function(event, context) {
+export const handler = async (event) => {
   try {
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     const translatedItems = await Promise.all(rss.items.slice(0, 10).map(async item => {
@@ -29,7 +29,7 @@ exports.handler = async function(event, context) {
   } catch (error) {
     return { statusCode: 500, body: error.toString() };
   }
-}
+};
 
 async function translateText(text) {
   const response = await axios.post(
@@ -46,7 +46,6 @@ async function translateText(text) {
 }
 
 function getCategoryFromDescription(description) {
-  // 간단한 카테고리 추출 로직 (실제로는 더 복잡할 수 있음)
   if (description.includes('EC2')) return '컴퓨팅';
   if (description.includes('S3')) return '스토리지';
   if (description.includes('Lambda')) return '서버리스';
