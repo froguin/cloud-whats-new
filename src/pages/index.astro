@@ -14,7 +14,9 @@ let updates: Update[] = [];
 let errorMessage: string | null = null;
 
 try {
-  const response = await fetch('/.netlify/functions/fetch-updates', {
+  // Astro.url을 사용하여 전체 URL 구성
+  const baseUrl = Astro.url.origin;
+  const response = await fetch(`${baseUrl}/.netlify/functions/fetch-updates`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',

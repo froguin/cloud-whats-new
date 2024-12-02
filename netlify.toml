@@ -8,6 +8,11 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+[[headers]]
+  for = "/styles/*"
+  [headers.values]
+    Content-Type = "text/css"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -18,8 +23,3 @@
 
 [functions]
   node_bundler = "esbuild"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Content-Type = "text/css"
