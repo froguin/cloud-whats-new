@@ -7,15 +7,17 @@ interface Update {
   title: string;
   date: string;
   content: string;
-  // 필요한 다른 필드들도 추가하세요
 }
 
+// 서버 사이드에서 데이터 페칭
 let updates: Update[] = [];
+let errorMessage: string | null = null;
+
 try {
-  const response = await fetch('/.netlify/functions/fetch-updates', {
-    method: 'POST',
+  const response = await fetch(import.meta.env.SITE_URL + '/.netlify/functions/fetch-updates', {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
   });
   
@@ -24,20 +26,48 @@ try {
   }
   
   updates = await response.json();
-} catch (error) {
-  console.error('데이터를 가져오는 중 오류가 발생했습니다:', error);
-  updates = []; // 오류 발생 시 빈 배열 사용
+} catch (e) {
+  console.error('데이터를 가져오는 중 오류가 발생했습니다:', e);
+  errorMessage = e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다';
 }
 ---
 
 <Layout title="AWS What's New 한국어 요약">
-  <section class="updates">
-    {updates.length > 0 ? (
-      updates.map((update: Update) => (
-        <UpdateCard {...update} />
-      ))
+  <main class="container mx-auto px-4 py-8">
+    {errorMessage ? (
+      <div class="error-message">
+        <p>데이터를 불러오는 중 오류가 발생했습니다: {errorMessage}</p>
+      </div>
     ) : (
-      <p>현재 표시할 업데이트가 없습니다.</p>
+      <section class="updates-grid">
+        {updates.length > 0 ? (
+          updates.map((update) => (
+            <UpdateCard {...update} />
+          ))
+        ) : (
+          <div class="no-updates">
+            <p>현재 표시할 업데이트가 없습니다.</p>
+          </div>
+        )}
+      </section>
     )}
-  </section>
+  </main>
+
+  <style>
+    .updates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 2rem;
+      padding: 1rem;
+    }
+    .error-message {
+      color: red;
+      text-align: center;
+      padding: 2rem;
+    }
+    .no-updates {
+      text-align: center;
+      padding: 2rem;
+    }
+  </style>
 </Layout>

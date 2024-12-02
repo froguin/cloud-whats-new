@@ -5,29 +5,36 @@ export const handler = async (event) => {
   try {
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     const translatedItems = await Promise.all(rss.items.slice(0, 10).map(async item => {
-      const [translatedTitle, translatedDescription] = await Promise.all([
+      const [translatedTitle, translatedContent] = await Promise.all([
         translateText(item.title),
         translateText(item.description)
       ]);
 
       return {
         title: translatedTitle,
-        category: getCategoryFromDescription(item.description),
-        description: translatedDescription,
-        target: "모든 AWS 사용자",
-        features: "자세한 내용은 원문을 참조하세요.",
-        regions: "지원 리전 정보 없음",
-        status: "일반 공개",
-        date: new Date(item.published).toLocaleDateString('ko-KR')
+        date: new Date(item.published).toLocaleDateString('ko-KR'),
+        content: translatedContent
       };
     }));
 
     return {
       statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
       body: JSON.stringify(translatedItems)
     };
   } catch (error) {
-    return { statusCode: 500, body: error.toString() };
+    console.error('Error:', error);
+    return { 
+      statusCode: 500, 
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({ error: error.message }) 
+    };
   }
 };
 
