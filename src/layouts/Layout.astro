@@ -1,0 +1,23 @@
+---
+const { title } = Astro.props;
+---
+
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="stylesheet" href="/styles/global.css" />
+  </head>
+  <body>
+    <header>
+      <h1>AWS What's New 한국어 요약</h1>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>© {new Date().getFullYear()} AWS What's New 한국어 요약. 모든 권리 보유.</p>
+    </footer>
+  </body>
+</html>

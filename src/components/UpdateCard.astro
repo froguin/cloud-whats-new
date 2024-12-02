@@ -1,0 +1,33 @@
+---
+const { title, category, description, target, features, regions, status, date } = Astro.props;
+---
+
+<article class="update-card">
+  <h2>{title}</h2>
+  <p class="category">{category}</p>
+  <p class="description">{description}</p>
+  <ul>
+    <li><strong>대상:</strong> {target}</li>
+    <li><strong>주요 기능:</strong> {features}</li>
+    <li><strong>지원 리전:</strong> {regions}</li>
+    <li><strong>상태:</strong> {status}</li>
+  </ul>
+  <p class="date">업데이트: {date}</p>
+</article>
+
+<style>
+  .update-card {
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+  }
+  .category {
+    color: #0073bb;
+    font-weight: bold;
+  }
+  .date {
+    color: #666;
+    font-style: italic;
+  }
+</style>
