@@ -1,7 +1,7 @@
-import { parse } from 'rss-to-json';
-import axios from 'axios';
+const { parse } = require('rss-to-json');
+const axios = require('axios');
 
-export const handler = async function(event, context) {
+exports.handler = async function(event, context) {
   try {
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     const translatedItems = await Promise.all(rss.items.slice(0, 10).map(async item => {
