@@ -13,7 +13,11 @@
     "@astrojs/netlify": "^5.5.4",
     "astro": "^4.16.16",
     "axios": "^1.7.8",
+    "dompurify": "^3.2.2",
     "rss-to-json": "^2.1.1",
     "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5"
   }
 }

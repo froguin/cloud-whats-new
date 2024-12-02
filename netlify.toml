@@ -13,3 +13,8 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css"
