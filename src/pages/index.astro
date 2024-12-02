@@ -8,7 +8,7 @@ const updates = await response.json();
 
 <Layout title="AWS What's New 한국어 요약">
   <section class="updates">
-    {updates.map((update) => (
+    {updates.map((update: any) => (
       <UpdateCard {...update} />
     ))}
   </section>
