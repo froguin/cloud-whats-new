@@ -2,20 +2,42 @@
 import Layout from '../layouts/Layout.astro';
 import UpdateCard from '../components/UpdateCard.astro';
 
----
-const response = await fetch('/.netlify/functions/fetch-updates', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-const updates = await response.json();
+// 업데이트 타입 정의
+interface Update {
+  title: string;
+  date: string;
+  content: string;
+  // 필요한 다른 필드들도 추가하세요
+}
+
+let updates: Update[] = [];
+try {
+  const response = await fetch('/.netlify/functions/fetch-updates', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  updates = await response.json();
+} catch (error) {
+  console.error('데이터를 가져오는 중 오류가 발생했습니다:', error);
+  updates = []; // 오류 발생 시 빈 배열 사용
+}
 ---
 
 <Layout title="AWS What's New 한국어 요약">
   <section class="updates">
-    {updates.map((update: any) => (
-      <UpdateCard {...update} />
-    ))}
+    {updates.length > 0 ? (
+      updates.map((update: Update) => (
+        <UpdateCard {...update} />
+      ))
+    ) : (
+      <p>현재 표시할 업데이트가 없습니다.</p>
+    )}
   </section>
 </Layout>
