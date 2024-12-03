@@ -83,10 +83,11 @@ export const handler = async () => {
             day: 'numeric'
           }),
           content: translatedContent
-            .replace(/<a\b[^>]*>/gi, '')
-            .replace(/<\/a>/gi, '')
+            .replace(/<a\b[^>]*>|<\/a>|aws\.amazon\.com[^"'\s<>]*|https?:\/\/[^"'\s<>]*/gi, '')
             .replace(/&nbsp;/g, ' ')
             .replace(/\s+/g, ' ')
+            .replace(/\s*에서 확인하시기 바랍니다\.*/, '.')
+            .replace(/자세한 내용은\s*\./, '')
             .trim(),
           target: "모든 AWS 사용자",
           features: "자세한 내용은 원문을 참조하세요",
