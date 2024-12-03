@@ -14,7 +14,9 @@ export const handler = async () => {
       throw new Error('Required environment variable DEEPL_API_KEY is missing');
     }
 
-    const store = getStore();
+    const store = getStore({
+      name: "aws-updates-store"
+    });
     
     try {
       // 캐시된 데이터 확인
