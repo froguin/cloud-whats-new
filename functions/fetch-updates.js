@@ -14,8 +14,15 @@ export const handler = async () => {
       throw new Error('Required environment variable DEEPL_API_KEY is missing');
     }
 
+    if (!process.env.NETLIFY_SITE_ID || !process.env.NETLIFY_ACCESS_TOKEN) {
+      console.error('Netlify Blobs 환경 변수가 설정되지 않았습니다');
+      throw new Error('Required Netlify Blobs environment variables are missing');
+    }
+
     const store = getStore({
-      name: "aws-updates-store"
+      name: "aws-updates-store",
+      siteID: process.env.NETLIFY_SITE_ID,
+      token: process.env.NETLIFY_ACCESS_TOKEN
     });
     
     try {
