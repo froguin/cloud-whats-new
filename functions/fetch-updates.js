@@ -37,7 +37,14 @@ export const handler = async () => {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
           },
-          body: JSON.stringify(parsedData.items)
+          body: JSON.stringify({
+            items: parsedData.items,
+            meta: {
+              isCached: true,
+              lastUpdated: parsedData.timestamp,
+              itemCount: parsedData.items.length
+            }
+          })
         };
       }
     } catch (cacheError) {
@@ -123,7 +130,14 @@ export const handler = async () => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify(translatedItems)
+      body: JSON.stringify({
+        items: translatedItems,
+        meta: {
+          isCached: false,
+          lastUpdated: new Date().toISOString(),
+          itemCount: translatedItems.length
+        }
+      })
     };
 
   } catch (error) {
