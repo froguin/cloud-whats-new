@@ -47,7 +47,18 @@ export const handler = async () => {
 
     // 새로운 데이터 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
-    const translatedItems = await Promise.all(rss.items.slice(0, 10).map(async item => {
+    
+    // 일주일 전 날짜 계산
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    // 일주일 이내의 항목만 필터링
+    const recentItems = rss.items.filter(item => {
+      const itemDate = new Date(item.published);
+      return itemDate >= oneWeekAgo;
+    });
+
+    const translatedItems = await Promise.all(recentItems.map(async item => {
       const [translatedTitle, translatedContent] = await Promise.all([
         translateText(item.title),
         translateText(item.description)
