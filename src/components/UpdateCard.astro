@@ -7,17 +7,10 @@ interface Props {
   features?: string;
   regions?: string;
   status?: string;
+  originalLink?: string;
 }
 
-const { 
-  title, 
-  date, 
-  content,
-  target = "모든 AWS 사용자",
-  features = "자세한 내용은 원문을 참조하세요",
-  regions = "지원 리전 정보 없음",
-  status = "일반 공개"
-} = Astro.props;
+const { title, date, content, target, features, regions, status, originalLink } = Astro.props;
 ---
 
 <article class="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 ease-in-out">
@@ -48,11 +41,17 @@ const {
     </dl>
   </div>
   <div class="px-6 py-4 bg-gray-50 border-t border-gray-100">
-    <a href="#" class="text-sm font-medium text-blue-600 hover:text-blue-500 inline-flex items-center">
-      자세히 보기
-      <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-      </svg>
-    </a>
+    {originalLink && (
+      <div class="px-4 py-3 bg-gray-50">
+        <a 
+          href={originalLink} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          class="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center"
+        >
+          자세히 보기 →
+        </a>
+      </div>
+    )}
   </div>
 </article>
