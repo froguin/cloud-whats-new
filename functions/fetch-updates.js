@@ -3,7 +3,7 @@ import axios from 'axios';
 import { getStore } from "@netlify/blobs";
 
 const CACHE_KEY = 'aws-updates';
-const CACHE_TTL = 3600; // 1시간 캐시
+const CACHE_TTL = 600; // 10분 캐시
 
 export const handler = async () => {
   try {
@@ -30,14 +30,15 @@ export const handler = async () => {
       const cachedData = await store.get(CACHE_KEY);
       if (cachedData) {
         console.log('캐시된 데이터 반환');
-        const parsedData = JSON.parse(cachedData); // 문자열을 JSON으로 파싱
+        const parsedData = JSON.parse(cachedData);
+        console.log('마지막 업데이트:', new Date(parsedData.timestamp).toLocaleString('ko-KR'));
         return {
           statusCode: 200,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
           },
-          body: JSON.stringify(parsedData)
+          body: JSON.stringify(parsedData.items)
         };
       }
     } catch (error) {
@@ -79,11 +80,16 @@ export const handler = async () => {
     }));
 
     // 데이터 캐싱
+    const cacheData = {
+      timestamp: new Date().toISOString(),
+      items: translatedItems
+    };
+
     try {
-      await store.set(CACHE_KEY, JSON.stringify(translatedItems), { // JSON 문자열로 변환하여 저장
-        ttl: CACHE_TTL // 1시간 후 만료
+      await store.set(CACHE_KEY, JSON.stringify(cacheData), {
+        ttl: CACHE_TTL
       });
-      console.log('데이터 캐시 성공');
+      console.log('데이터 캐시 성공 -', new Date().toLocaleString('ko-KR'));
     } catch (error) {
       console.error('데이터 캐시 실패:', error);
     }
@@ -126,11 +132,4 @@ async function translateText(text) {
     console.error('Translation error:', error);
     throw error;
   }
-}
-
-function getCategoryFromDescription(description) {
-  if (description.includes('EC2')) return '컴퓨팅';
-  if (description.includes('S3')) return '스토리지';
-  if (description.includes('Lambda')) return '서버리스';
-  return '기타';
 }
