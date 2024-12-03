@@ -30,16 +30,21 @@ export const handler = async () => {
       const cachedData = await store.get(CACHE_KEY);
       if (cachedData) {
         console.log('캐시된 데이터 반환');
-        const parsedData = JSON.parse(cachedData);
-        console.log('마지막 업데이트:', new Date(parsedData.timestamp).toLocaleString('ko-KR'));
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          },
-          body: JSON.stringify(parsedData.items)
-        };
+        try {
+          const parsedData = JSON.parse(cachedData);
+          console.log('마지막 업데이트:', new Date(parsedData.timestamp).toLocaleString('ko-KR'));
+          return {
+            statusCode: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            },
+            body: JSON.stringify(parsedData.items)
+          };
+        } catch (parseError) {
+          console.error('캐시 데이터 파싱 실패:', parseError);
+          // 캐시 데이터가 손상된 경우 새로운 데이터를 가져오도록 진행
+        }
       }
     } catch (error) {
       console.log('캐시 데이터 조회 실패:', error);
