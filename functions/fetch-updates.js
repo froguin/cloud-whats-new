@@ -69,8 +69,17 @@ export const handler = async () => {
 
       return {
         title: translatedTitle,
-        date: new Date(item.published).toLocaleDateString('ko-KR'),
-        content: translatedContent,
+        date: new Date(item.published).toLocaleDateString('ko-KR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        content: translatedContent
+          .replace(/<a\b[^>]*>/gi, '') // 링크 태그 제거
+          .replace(/<\/a>/gi, '')      // 링크 닫는 태그 제거
+          .replace(/&nbsp;/g, ' ')     // &nbsp; 를 일반 공백으로 변경
+          .replace(/\s+/g, ' ')        // 연속된 공백을 하나로
+          .trim(),                     // 앞뒤 공백 제거
         target: "모든 AWS 사용자",
         features: "자세한 내용은 원문을 참조하세요",
         regions: "지원 리전 정보 없음",

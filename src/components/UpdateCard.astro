@@ -23,7 +23,7 @@ const { title, date, content, target, features, regions, status, originalLink } 
     </div>
     <h2 class="text-xl font-semibold text-gray-900 mb-4">{title}</h2>
     <div class="prose prose-sm text-gray-600 mb-4">
-      <p>{content}</p>
+      <div set:html={content} />
     </div>
     <dl class="grid grid-cols-1 gap-3 mt-4 border-t pt-4">
       <div>
