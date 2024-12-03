@@ -25,4 +25,7 @@
   node_bundler = "esbuild"
 
 [[plugins]]
-  package = "@netlify/plugin-netlify-blobs"
+package = "@netlify/plugin-netlify-blobs"
+
+[[blobs.stores]]
+name = "aws-updates"
