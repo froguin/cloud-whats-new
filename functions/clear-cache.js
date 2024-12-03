@@ -8,7 +8,7 @@ export const handler = async () => {
       token: process.env.NETLIFY_ACCESS_TOKEN
     });
 
-    await store.delete('aws-updates');
+    await store.delete('aws-updates-v2');
     
     return {
       statusCode: 200,
