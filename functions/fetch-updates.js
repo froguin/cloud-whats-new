@@ -47,6 +47,7 @@ export const handler = async () => {
 
     // 새로운 데이터 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
+    console.log('전체 RSS 항목 수:', rss.items.length);
     
     // 일주일 전 날짜 계산
     const oneWeekAgo = new Date();
@@ -57,6 +58,7 @@ export const handler = async () => {
       const itemDate = new Date(item.published);
       return itemDate >= oneWeekAgo;
     });
+    console.log('일주일 이내 항목 수:', recentItems.length);
 
     const translatedItems = await Promise.all(recentItems.map(async item => {
       const [translatedTitle, translatedContent] = await Promise.all([
