@@ -30,13 +30,14 @@ export const handler = async () => {
       const cachedData = await store.get(CACHE_KEY);
       if (cachedData) {
         console.log('캐시된 데이터 반환');
+        const parsedData = JSON.parse(cachedData); // 문자열을 JSON으로 파싱
         return {
           statusCode: 200,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
           },
-          body: JSON.stringify(cachedData)
+          body: JSON.stringify(parsedData)
         };
       }
     } catch (error) {
@@ -66,7 +67,7 @@ export const handler = async () => {
 
     // 데이터 캐싱
     try {
-      await store.set(CACHE_KEY, translatedItems, {
+      await store.set(CACHE_KEY, JSON.stringify(translatedItems), { // JSON 문자열로 변환하여 저장
         ttl: CACHE_TTL // 1시간 후 만료
       });
       console.log('데이터 캐시 성공');
