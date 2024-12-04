@@ -111,8 +111,11 @@ async function invokeNovaLiteSummarization(title, description) {
   try {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
-    const responseBody = await response.json(); // JSON 형식으로 응답을 파싱
-    return responseBody; // JSON 형식으로 반환
+    // 응답의 body를 직접 확인하고 JSON으로 파싱
+    const decodedResponseBody = new TextDecoder().decode(response.body);
+    const parsedResponse = JSON.parse(decodedResponseBody);
+    
+    return parsedResponse; // JSON 형식으로 반환
   } catch (error) {
     console.error('NovaLite 모델 호출 중 오류:', error);
     throw error;
