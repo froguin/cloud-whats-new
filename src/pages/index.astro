@@ -51,7 +51,7 @@ try {
       <div class="text-sm text-gray-500 mb-4">
         <div class="flex justify-between items-center">
           <div>
-            마지막 업데이트: {new Date(meta.lastUpdated).toLocaleString('ko-KR')}
+            마지막 업데이트: {new Date(meta.lastUpdated).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
             {meta.isCached && <span class="ml-2 text-blue-600">(캐시됨)</span>}
           </div>
           <div>

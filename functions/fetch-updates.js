@@ -221,7 +221,7 @@ export const handler = async () => {
 
     // 새로운 데이터 캐시 저장
     const cacheData = {
-      timestamp: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+      timestamp: new Date().toISOString(),
       items: processedItems
     };
     await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
