@@ -119,6 +119,7 @@ Please provide a **single-line JSON-formatted response** with the following stru
 3. 모든 필드는 JSON.parse()로 바로 파싱 가능해야 합니다.
 4. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 작성하십시오.
 5. 응답은 **최대 300자**를 넘지 않도록 간결하게 작성하십시오.
+6. 번역 시에 AWS 또는 Amazon 으로 시작하는 제품명은 원문 그대로 표현하는 것이 좋습니다.
 
 **Example JSON Response:**
 {
