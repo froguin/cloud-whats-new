@@ -14,7 +14,6 @@ const bedrockClient = new BedrockRuntimeClient({
   }
 });
 
-
 // Claude 모델을 사용한 요약 및 번역 함수
 async function invokeClaudeSummarization(title, description) {
   const prompt = generateSystemPrompt(title, description);
@@ -162,11 +161,13 @@ export const handler = async () => {
     });
 
     // 캐시된 데이터 확인
-    try {
-      const cachedData = await store.get(CACHE_KEY);
-      if (cachedData) {
-        console.log('캐시된 데이터 반환');
-        const parsedData = JSON.parse(cachedData);
+    const cachedData = await store.get(CACHE_KEY);
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData);
+      const cacheAge = Date.now() - new Date(parsedData.timestamp).getTime();
+    
+      if (cacheAge < CACHE_TTL * 1000) {
+        console.log('유효한 캐시된 데이터 반환');
         return {
           statusCode: 200,
           headers: {
@@ -182,79 +183,49 @@ export const handler = async () => {
             }
           })
         };
+      } else {
+        console.log('캐시 만료, 새로운 데이터 가져오기');
+        await store.delete(CACHE_KEY);
       }
-    } catch (cacheError) {
-      console.error('캐시 조회 실패:', cacheError.message);
-      // 캐시 조회 실패는 무시하고 새로운 데이터 가져오기 시도
     }
 
-    // RSS 피드 가져오기
-    let rss;
-    try {
-      rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
-      console.log('전체 RSS 항목 수:', rss.items.length);
-    } catch (rssError) {
-      console.error('RSS 피드 가져오기 실패:', rssError.message);
-      throw new Error('AWS 업데이트 정보를 가져오는데 실패했습니다');
-    }
+    // RSS 피드 가져오기 및 처리
+    const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
+    console.log('전체 RSS 항목 수:', rss.items.length);
 
-    // 일주일 이내 항목 필터링
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const recentItems = rss.items.filter(item => {
-      const itemDate = new Date(item.published);
-      return itemDate >= oneWeekAgo;
-    });
+    const recentItems = rss.items.filter(item => new Date(item.published) >= oneWeekAgo);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
-    // 요약 및 번역 작업
-    let processedItems;
-    try {
-      processedItems = await Promise.all(recentItems.map(async item => {
-        console.log('처리 시작:', item.title.substring(0, 30) + '...');
-        
-        // Claude 요약 및 번역 요청
-        const summaryResponse = await invokeClaudeSummarization(
-          item.title, 
-          item.description
-        );
-
-        console.log('처리 완료:', item.title.substring(0, 30) + '...');
-
-        return {
-          title: summaryResponse.title,
-          date: new Date(item.published).toLocaleDateString('ko-KR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          }),
-          content: summaryResponse.summary,
-          target: summaryResponse.target || "모든 AWS 사용자",
-          features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-          regions: summaryResponse.regions || "지원 리전 정보 없음",
-          status: summaryResponse.status || "일반 공개",
-          originalLink: item.link || ''
-        };
-      }));
-    } catch (processError) {
-      console.error('처리 실패:', processError.message);
-      throw new Error('컨텐츠 처리 중 오류가 발생했습니다');
-    }
-
-    // 모든 작업이 성공한 경우에만 캐시 업데이트
-    try {
-      const cacheData = {
-        timestamp: new Date().toISOString(),
-        items: processedItems  // translatedItems 대신 processedItems 사용
+    const processedItems = await Promise.all(recentItems.map(async item => {
+      console.log('처리 시작:', item.title.substring(0, 30) + '...');
+      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
+      console.log('처리 완료:', item.title.substring(0, 30) + '...');
+      
+      return {
+        title: summaryResponse.title,
+        date: new Date(item.published).toLocaleDateString('ko-KR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        content: summaryResponse.summary,
+        target: summaryResponse.target || "모든 AWS 사용자",
+        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+        regions: summaryResponse.regions || "지원 리전 정보 없음",
+        status: summaryResponse.status || "일반 공개",
+        originalLink: item.link || ''
       };
-      await store.set(CACHE_KEY, JSON.stringify(cacheData), {
-        ttl: CACHE_TTL
-      });
-      console.log('데이터 캐시 성공');
-    } catch (cacheError) {
-      // 캐시 저장 실패는 무시하고 계속 진행
-      console.error('캐시 저장 실패:', cacheError.message);
-    }
+    }));
+
+    // 새로운 데이터 캐시 저장
+    const cacheData = {
+      timestamp: new Date().toISOString(),
+      items: processedItems
+    };
+    await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
+    console.log('새로운 데이터 캐시 저장 완료');
 
     console.log('=== Function completed ===');
     return {
@@ -264,15 +235,14 @@ export const handler = async () => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({
-        items: processedItems,  // translatedItems 대신 processedItems 사용
+        items: processedItems,
         meta: {
           isCached: false,
-          lastUpdated: new Date().toISOString(),
-          itemCount: processedItems.length  // translatedItems.length 대신 processedItems.length 사용
+          lastUpdated: cacheData.timestamp,
+          itemCount: processedItems.length
         }
       })
     };
-
   } catch (error) {
     console.error('Function error:', error.message);
     console.error('Error stack:', error.stack);

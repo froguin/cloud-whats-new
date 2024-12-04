@@ -26,6 +26,3 @@
 
 [[blobs.stores]]
 name = "aws-updates"
-
-[functions."clear-cache"]
-  schedule = "*/10 * * * *"
