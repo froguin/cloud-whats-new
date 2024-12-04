@@ -157,7 +157,7 @@ export const handler = async () => {
 async function translateText(text) {
   try {
     const response = await axios.post(
-      `https://api-free.deepl.com/v2/translate`,
+      `https://api.deepl.com/v2/translate`,
       `text=${encodeURIComponent(text)}&target_lang=KO`,
       {
         headers: {
