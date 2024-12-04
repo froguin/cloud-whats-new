@@ -205,7 +205,7 @@ export const handler = async () => {
     try {
       const cacheData = {
         timestamp: new Date().toISOString(),
-        items: translatedItems
+        items: processedItems  // translatedItems 대신 processedItems 사용
       };
       await store.set(CACHE_KEY, JSON.stringify(cacheData), {
         ttl: CACHE_TTL
@@ -224,11 +224,11 @@ export const handler = async () => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({
-        items: translatedItems,
+        items: processedItems,  // translatedItems 대신 processedItems 사용
         meta: {
           isCached: false,
           lastUpdated: new Date().toISOString(),
-          itemCount: translatedItems.length
+          itemCount: processedItems.length  // translatedItems.length 대신 processedItems.length 사용
         }
       })
     };
