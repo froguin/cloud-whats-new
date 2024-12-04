@@ -78,7 +78,7 @@ async function invokeNovaLiteSummarization(title, description) {
   };
 
   try {
-    const command = new InvokeModelWithResponseStreamCommand(params);
+    const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
     const responseStream = Readable.from(response.body);
     let fullResponse = '';
