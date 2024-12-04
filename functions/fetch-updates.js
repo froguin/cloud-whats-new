@@ -40,15 +40,65 @@ async function invokeClaudeSummarization(title, description) {
     const decodedResponseBody = new TextDecoder().decode(response.body);
     const parsedResponse = JSON.parse(decodedResponseBody);
     
-    return parseClaudeResponse(parsedResponse.content[0].text);
+    return parseModelResponse(parsedResponse.content[0].text);
   } catch (error) {
     console.error('Claude 모델 호출 중 오류:', error);
     throw error;
   }
 }
 
+async function invokeNovaLiteSummarization(title, description) {
+  const systemPrompt = generateSystemPrompt();
+  const userPrompt = `Title: ${title}\nDescription: ${description}`;
+  
+  const params = {
+    modelId: 'us.amazon.nova-lite-v1:0',
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify({
+      schemaVersion: "messages-v1",
+      messages: [
+        {
+          role: "user",
+          content: [{ text: userPrompt }]
+        }
+      ],
+      system: [
+        {
+          text: systemPrompt
+        }
+      ],
+      inferenceConfig: {
+        max_new_tokens: 1000,
+        top_p: 0.9,
+        top_k: 20,
+        temperature: 0.7
+      }
+    })
+  };
+
+  try {
+    const command = new InvokeModelWithResponseStreamCommand(params);
+    const response = await bedrockClient.send(command);
+    const responseStream = Readable.from(response.body);
+    let fullResponse = '';
+
+    for await (const chunk of responseStream) {
+      const chunkJson = JSON.parse(chunk.toString());
+      if (chunkJson.contentBlockDelta) {
+        fullResponse += chunkJson.contentBlockDelta.delta.text;
+      }
+    }
+
+    return parseModelResponse(fullResponse);
+  } catch (error) {
+    console.error('Nova 모델 호출 중 오류:', error);
+    throw error;
+  }
+}
+
 // Claude 응답 파싱 함수
-function parseClaudeResponse(responseText) {
+function parseModelResponse(responseText) {
   try {
     // 응답에서 내부 JSON 블록 찾기
     const jsonStart = responseText.indexOf('{', responseText.indexOf('"title"'));
@@ -200,7 +250,7 @@ export const handler = async () => {
 
     const processedItems = await Promise.all(recentItems.map(async item => {
       console.log('처리 시작:', item.title.substring(0, 30) + '...');
-      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
+      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
       console.log('처리 완료:', item.title.substring(0, 30) + '...');
       
       return {
