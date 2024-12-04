@@ -5,6 +5,94 @@ import { getStore } from "@netlify/blobs";
 const CACHE_KEY = 'aws-updates-v2';
 const CACHE_TTL = 600; // 10분 캐시
 
+// 클라이언트를 최상위 범위에서 생성
+const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.CUSTOM_AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.CUSTOM_AWS_ACCESS_KEY,
+    secretAccessKey: process.env.CUSTOM_AWS_SECRET_KEY
+  }
+});
+
+
+// Claude 모델을 사용한 요약 및 번역 함수
+async function invokeClaudeSummarization(title, description) {
+  const prompt = generateSystemPrompt(title, description);
+
+  const params = {
+    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify({
+      anthropic_version: "bedrock-2023-05-31",
+      max_tokens: 1000,
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    })
+  };
+
+  try {
+    const command = new InvokeModelCommand(params);
+    const response = await bedrockClient.send(command);
+    const decodedResponseBody = new TextDecoder().decode(response.body);
+    const parsedResponse = JSON.parse(decodedResponseBody);
+    
+    return parseClaudeResponse(parsedResponse.content[0].text);
+  } catch (error) {
+    console.error('Claude 모델 호출 중 오류:', error);
+    throw error;
+  }
+}
+
+// Claude 응답 파싱 함수
+function parseClaudeResponse(responseText) {
+  try {
+    // JSON 형식의 응답을 파싱
+    return JSON.parse(responseText);
+  } catch (error) {
+    // JSON 파싱 실패 시 기본 응답 반환
+    return {
+      title: responseText.split('\n')[0] || '제목 없음',
+      summary: responseText,
+      target: "모든 AWS 사용자",
+      features: "자세한 내용은 원문을 참조하세요",
+      regions: "지원 리전 정보 없음",
+      status: "일반 공개"
+    };
+  }
+}
+
+// 시스템 프롬프트 생성 함수
+function generateSystemPrompt(title, description) {
+  return `
+You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
+
+Original Title: ${title}
+Original Description: ${description}
+
+Please provide a JSON-formatted response with the following structure:
+{
+  "title": "한국어로 번역된 명확하고 간결한 제목",
+  "summary": "주요 업데이트 내용을 3-4문장으로 한국어로 요약",
+  "target": "이 업데이트의 주요 대상 사용자 그룹",
+  "features": "주요 기능 또는 변경 사항 요약",
+  "regions": "지원되는 AWS 리전 (알려진 경우)",
+  "status": "현재 상태 (예: 일반 공개, 베타, 제한된 출시 등)"
+}
+
+Guidelines:
+1. 제목은 간결하고 명확하게 번역
+2. 요약은 비즈니스 가치와 기술적 세부사항 균형 있게 작성
+3. 대상, 기능, 리전 정보는 가능한 한 구체적으로
+4. JSON 형식 유지 (JSON.parse()로 파싱 가능해야 함)
+5. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 표시
+`;
+}
+
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -25,15 +113,6 @@ export const handler = async () => {
     });
 
     console.log('환경변수 확인 완료');
-
-    // Bedrock 클라이언트 설정
-    const bedrockClient = new BedrockRuntimeClient({
-      region: process.env.CUSTOM_AWS_REGION,
-      credentials: {
-        accessKeyId: process.env.CUSTOM_AWS_ACCESS_KEY,
-        secretAccessKey: process.env.CUSTOM_AWS_SECRET_KEY
-      }
-    });
 
     // Blob 스토어 초기화
     const store = getStore({
@@ -167,82 +246,3 @@ export const handler = async () => {
     };
   }
 };
-
-
-// Claude 모델을 사용한 요약 및 번역 함수
-async function invokeClaudeSummarization(title, description) {
-  const prompt = generateSystemPrompt(title, description);
-
-  const params = {
-    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify({
-      anthropic_version: "bedrock-2023-05-31",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    })
-  };
-
-  try {
-    const command = new InvokeModelCommand(params);
-    const response = await bedrockClient.send(command);
-    const decodedResponseBody = new TextDecoder().decode(response.body);
-    const parsedResponse = JSON.parse(decodedResponseBody);
-    
-    return parseClaudeResponse(parsedResponse.content[0].text);
-  } catch (error) {
-    console.error('Claude 모델 호출 중 오류:', error);
-    throw error;
-  }
-}
-
-// Claude 응답 파싱 함수
-function parseClaudeResponse(responseText) {
-  try {
-    // JSON 형식의 응답을 파싱
-    return JSON.parse(responseText);
-  } catch (error) {
-    // JSON 파싱 실패 시 기본 응답 반환
-    return {
-      title: responseText.split('\n')[0] || '제목 없음',
-      summary: responseText,
-      target: "모든 AWS 사용자",
-      features: "자세한 내용은 원문을 참조하세요",
-      regions: "지원 리전 정보 없음",
-      status: "일반 공개"
-    };
-  }
-}
-
-// 시스템 프롬프트 생성 함수
-function generateSystemPrompt(title, description) {
-  return `
-You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
-
-Original Title: ${title}
-Original Description: ${description}
-
-Please provide a JSON-formatted response with the following structure:
-{
-  "title": "한국어로 번역된 명확하고 간결한 제목",
-  "summary": "주요 업데이트 내용을 3-4문장으로 한국어로 요약",
-  "target": "이 업데이트의 주요 대상 사용자 그룹",
-  "features": "주요 기능 또는 변경 사항 요약",
-  "regions": "지원되는 AWS 리전 (알려진 경우)",
-  "status": "현재 상태 (예: 일반 공개, 베타, 제한된 출시 등)"
-}
-
-Guidelines:
-1. 제목은 간결하고 명확하게 번역
-2. 요약은 비즈니스 가치와 기술적 세부사항 균형 있게 작성
-3. 대상, 기능, 리전 정보는 가능한 한 구체적으로
-4. JSON 형식 유지 (JSON.parse()로 파싱 가능해야 함)
-5. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 표시
-`;
-}
