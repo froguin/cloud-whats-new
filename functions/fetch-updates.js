@@ -51,36 +51,45 @@ async function invokeClaudeSummarization(title, description) {
 // Claude 응답 파싱 함수
 function parseClaudeResponse(responseText) {
   try {
-    // 중첩된 JSON 문자열 처리
-    const cleanedResponse = responseText
-    .replace(/\n/g, '')          // 모든 줄바꿈 제거
-    .replace(/\t/g, ' ')         // 탭 제거
-    .replace(/\\n/g, ' ')        // \n 제거
-    .replace(/\\t/g, ' ')        // \t 제거
-    .replace(/"{/g, '{')         // 중첩된 따옴표 제거 (JSON 시작)
-    .replace(/}"/g, '}')         // 중첩된 따옴표 제거 (JSON 끝)
-    .replace(/\s{2,}/g, ' ');    // 중복 공백 제거
+    // 응답에서 내부 JSON 블록 찾기
+    const jsonStart = responseText.indexOf('{', responseText.indexOf('"title"'));
+    const jsonEnd = responseText.lastIndexOf('}');
+    const jsonString = responseText.substring(jsonStart, jsonEnd + 1);
 
-    // JSON 문자열로 파싱
-    const jsonStart = cleanedResponse.indexOf('{');
-    const jsonEnd = cleanedResponse.lastIndexOf('}');
-    const jsonString = cleanedResponse.substring(jsonStart, jsonEnd + 1);
+    // 불필요한 문자 정리
+    const cleanedJson = jsonString
+      .replace(/\\n/g, ' ')          // 줄바꿈 제거
+      .replace(/\\t/g, ' ')          // 탭 제거
+      .replace(/\s{2,}/g, ' ')       // 중복 공백 제거
+      .replace(/\\\\"/g, '"')        // 이중 이스케이프된 따옴표 제거
+      .replace(/\\'/g, "'")          // 이스케이프된 작은따옴표 제거
+      .trim();
 
-    const parsedResponse = JSON.parse(jsonString);
+    // JSON 파싱
+    const parsedResponse = JSON.parse(cleanedJson);
+
+    // content 필드에 중첩된 JSON이 있다면 추가로 파싱 시도
+    if (typeof parsedResponse.content === 'string' && parsedResponse.content.startsWith('{')) {
+      try {
+        parsedResponse.content = JSON.parse(parsedResponse.content);
+      } catch (contentError) {
+        console.warn('content 파싱 실패:', contentError);
+      }
+    }
     
     return {
       title: parsedResponse.title || '제목 없음',
-      summary: parsedResponse.summary || '',
+      summary: parsedResponse.summary || '내용 없음',
       target: parsedResponse.target || "모든 AWS 사용자",
       features: parsedResponse.features || "자세한 내용은 원문을 참조하세요",
       regions: parsedResponse.regions || "지원 리전 정보 없음",
-      status: parsedResponse.status || "일반 공개"
+      status: parsedResponse.status || "알 수 없음"
     };
   } catch (error) {
     console.error('JSON 파싱 오류:', error);
     // 기본 폴백 응답
     return {
-      title: responseText.split('\n')[0] || '제목 없음',
+      title: '파싱 오류 발생',
       summary: responseText
     };
   }
