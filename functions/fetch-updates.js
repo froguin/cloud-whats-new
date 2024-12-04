@@ -103,28 +103,32 @@ You are an expert in analyzing AWS service updates and providing concise, struct
 Original Title: ${title}
 Original Description: ${description}
 
-Please provide a JSON-formatted response with the following structure:
+Please provide a **single-line JSON-formatted response** with the following structure:
 {
   "title": "한국어로 번역된 명확하고 간결한 제목",
-  "summary": "주요 업데이트 내용을 3-4문장으로 한국어로 요약",
-  "target": "이 업데이트의 주요 대상 사용자 그룹",
-  "features": "주요 기능 또는 변경 사항 요약",
-  "regions": "지원되는 AWS 리전 (알려진 경우)",
+  "summary": "3-4문장으로 주요 업데이트 내용을 한국어로 요약 (100자 이하)",
+  "target": "이 업데이트의 주요 대상 사용자 그룹 (단일 문장)",
+  "features": "주요 기능 또는 변경 사항 요약 (100자 이하)",
+  "regions": "지원되는 AWS 리전 (알려진 경우, 없으면 '해당 없음')",
   "status": "현재 상태 (예: 일반 공개, 베타, 제한된 출시 등)"
 }
 
-Guidelines:
-1. 제목은 간결하고 명확하게 번역
-2. 요약은 비즈니스 가치와 기술적 세부사항 균형 있게 작성
-3. 대상, 기능, 리전 정보는 가능한 한 구체적으로
-4. JSON 형식 유지 (JSON.parse()로 파싱 가능해야 함)
-5. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 표시
+**Important Guidelines:**
+1. 응답은 **단일 줄**로 작성하고 줄바꿈이나 탭 문자를 사용하지 마십시오.
+2. 각 필드 값은 평문 문자열로 작성하고 중첩된 JSON을 포함하지 마십시오.
+3. 모든 필드는 JSON.parse()로 바로 파싱 가능해야 합니다.
+4. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 작성하십시오.
+5. 응답은 **최대 300자**를 넘지 않도록 간결하게 작성하십시오.
 
-JSON 생성 시 중요 가이드라인:
-- JSON 문자열은 중첩되지 않아야 함
-- 모든 필드의 값은 평면 문자열이어야 함
-- 긴 텍스트(예: features)는 줄바꿈 문자('\n')를 사용하여 여러 줄로 표현 가능
-- JSON.parse()로 즉시 파싱 가능해야 함
+**Example JSON Response:**
+{
+  "title": "AWS Lambda 기능 개선 발표",
+  "summary": "AWS Lambda가 새로운 메모리 옵션과 고급 모니터링 기능을 제공합니다.",
+  "target": "서버리스 애플리케이션 개발자",
+  "features": "메모리 옵션, 고급 모니터링",
+  "regions": "모든 AWS 리전",
+  "status": "일반 공개"
+}
 `;
 }
 
