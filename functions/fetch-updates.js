@@ -250,7 +250,7 @@ export const handler = async () => {
 
     const processedItems = await Promise.all(recentItems.map(async item => {
       console.log('처리 시작:', item.title.substring(0, 30) + '...');
-      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
       console.log('처리 완료:', item.title.substring(0, 30) + '...');
       
       return {
