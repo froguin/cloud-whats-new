@@ -52,8 +52,21 @@ async function invokeClaudeSummarization(title, description) {
 function parseClaudeResponse(responseText) {
   try {
     // 중첩된 JSON 문자열 처리
-    const cleanedResponse = responseText.replace(/^{|\n{/g, '').replace(/}$/g, '');
-    const parsedResponse = JSON.parse(`{${cleanedResponse}}`);
+    const cleanedResponse = responseText
+    .replace(/\n/g, '')          // 모든 줄바꿈 제거
+    .replace(/\t/g, ' ')         // 탭 제거
+    .replace(/\\n/g, ' ')        // \n 제거
+    .replace(/\\t/g, ' ')        // \t 제거
+    .replace(/"{/g, '{')         // 중첩된 따옴표 제거 (JSON 시작)
+    .replace(/}"/g, '}')         // 중첩된 따옴표 제거 (JSON 끝)
+    .replace(/\s{2,}/g, ' ');    // 중복 공백 제거
+
+    // JSON 문자열로 파싱
+    const jsonStart = cleanedResponse.indexOf('{');
+    const jsonEnd = cleanedResponse.lastIndexOf('}');
+    const jsonString = cleanedResponse.substring(jsonStart, jsonEnd + 1);
+
+    const parsedResponse = JSON.parse(jsonString);
     
     return {
       title: parsedResponse.title || '제목 없음',
@@ -68,11 +81,7 @@ function parseClaudeResponse(responseText) {
     // 기본 폴백 응답
     return {
       title: responseText.split('\n')[0] || '제목 없음',
-      summary: responseText,
-      target: "모든 AWS 사용자",
-      features: "자세한 내용은 원문을 참조하세요",
-      regions: "지원 리전 정보 없음",
-      status: "일반 공개"
+      summary: responseText
     };
   }
 }
