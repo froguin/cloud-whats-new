@@ -1,6 +1,7 @@
 import { parse } from 'rss-to-json';
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { getStore } from "@netlify/blobs";
+import fetch from 'node-fetch'; // node-fetch를 가져옵니다.
 
 const CACHE_KEY_PREFIX = 'aws-updates-';
 const CACHE_TTL = 604800; // 7일 캐시 (초 단위)
@@ -110,20 +111,42 @@ async function invokeNovaLiteSummarization(title, description) {
   try {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
-    let fullResponse = '';
-
-    for await (const chunk of responseStream) {
-      const chunkJson = JSON.parse(chunk.toString());
-      if (chunkJson.contentBlockDelta) {
-        fullResponse += chunkJson.contentBlockDelta.delta.text;
-      }
-    }
-
-    return JSON.parse(fullResponse); // JSON 형식으로 반환
+    const responseBody = await response.text(); // 응답을 텍스트로 변환
+    return JSON.parse(responseBody); // JSON 형식으로 반환
   } catch (error) {
     console.error('NovaLite 모델 호출 중 오류:', error);
     throw error;
   }
+}
+
+// Upstage Solar Pro 모델을 사용한 요약 및 번역 함수
+async function invokeSolarProSummarization(title, description) {
+  const prompt = generateSystemPrompt(title, description);
+  const apiKey = process.env.UPSTAGE_API_KEY; // 환경변수에서 API 키를 가져옵니다.
+  const response = await fetch('https://api.upstage.ai/v1/solar/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: "solar-pro",
+      messages: [
+        {
+          role: "user",
+          content: prompt // 시스템 프롬프트를 사용합니다.
+        }
+      ],
+      stream: false // 스트리밍을 끕니다.
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Solar Pro 모델 호출 실패: ${response.statusText}`);
+  }
+
+  const responseData = await response.json(); // JSON 형식으로 응답을 파싱합니다.
+  return responseData; // 응답을 반환합니다.
 }
 
 export const handler = async () => {
@@ -140,8 +163,8 @@ export const handler = async () => {
       const itemDate = new Date(item.pubDate).getTime();
       if (now - itemDate > CACHE_TTL * 1000) return null; // 7일 이상된 아이템은 무시
 
-      // NovaLite 모델을 사용하여 요약 및 번역
-      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+      // Solar Pro 모델을 사용하여 요약 및 번역
+      const summaryResponse = await invokeSolarProSummarization(item.title, item.description);
       const cacheKey = `${CACHE_KEY_PREFIX}${item.guid}`;
 
       // 캐시 데이터 구조를 시스템 프롬프트의 예제 JSON에 맞춤
