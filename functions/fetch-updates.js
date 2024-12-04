@@ -51,10 +51,21 @@ async function invokeClaudeSummarization(title, description) {
 // Claude 응답 파싱 함수
 function parseClaudeResponse(responseText) {
   try {
-    // JSON 형식의 응답을 파싱
-    return JSON.parse(responseText);
+    // 중첩된 JSON 문자열 처리
+    const cleanedResponse = responseText.replace(/^{|\n{/g, '').replace(/}$/g, '');
+    const parsedResponse = JSON.parse(`{${cleanedResponse}}`);
+    
+    return {
+      title: parsedResponse.title || '제목 없음',
+      summary: parsedResponse.summary || '',
+      target: parsedResponse.target || "모든 AWS 사용자",
+      features: parsedResponse.features || "자세한 내용은 원문을 참조하세요",
+      regions: parsedResponse.regions || "지원 리전 정보 없음",
+      status: parsedResponse.status || "일반 공개"
+    };
   } catch (error) {
-    // JSON 파싱 실패 시 기본 응답 반환
+    console.error('JSON 파싱 오류:', error);
+    // 기본 폴백 응답
     return {
       title: responseText.split('\n')[0] || '제목 없음',
       summary: responseText,
@@ -90,6 +101,12 @@ Guidelines:
 3. 대상, 기능, 리전 정보는 가능한 한 구체적으로
 4. JSON 형식 유지 (JSON.parse()로 파싱 가능해야 함)
 5. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 표시
+
+JSON 생성 시 중요 가이드라인:
+- JSON 문자열은 중첩되지 않아야 함
+- 모든 필드의 값은 평면 문자열이어야 함
+- 긴 텍스트(예: features)는 줄바꿈 문자('\n')를 사용하여 여러 줄로 표현 가능
+- JSON.parse()로 즉시 파싱 가능해야 함
 `;
 }
 
