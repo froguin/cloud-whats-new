@@ -167,7 +167,7 @@ export const handler = async () => {
       if (now - itemDate > CACHE_TTL * 1000) return null; // 7일 이상된 아이템은 무시
 
       // Solar Pro 모델을 사용하여 요약 및 번역
-      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
       const cacheKey = `${CACHE_KEY_PREFIX}${item.guid}`;
 
       // 캐시 데이터 구조를 시스템 프롬프트의 예제 JSON에 맞춤
