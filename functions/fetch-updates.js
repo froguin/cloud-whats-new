@@ -109,7 +109,7 @@ Please provide a **single-line JSON-formatted response** with the following stru
   "target": "이 업데이트의 주요 대상 사용자 그룹 (단일 문장)",
   "features": "주요 기능 또는 변경 사항 요약 (100자 이하)",
   "regions": "지원되는 AWS 리전 (알려진 경우, 없으면 '해당 없음')",
-  "status": "현재 상태 (예: 일반 공개, 베타, 제한된 출시 등)"
+  "status": "현재 상태 (예: 정식 출시, 미리보기 등으로 표기하며, '일반 공개'는 정식 출시로, '프리뷰'나 '미리보기 단계'는 미리보기로 표기합니다)"
 }
 
 **Important Guidelines:**
@@ -127,7 +127,7 @@ Please provide a **single-line JSON-formatted response** with the following stru
   "target": "서버리스 애플리케이션 개발자",
   "features": "메모리 옵션, 고급 모니터링",
   "regions": "모든 AWS 리전",
-  "status": "일반 공개"
+  "status": "정식 출시"
 }
 `;
 }
