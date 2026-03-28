@@ -1,21 +1,23 @@
--- Articles table (English originals = source of truth)
+-- Source of truth: raw ingestion + dedup
 CREATE TABLE IF NOT EXISTS articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  csp TEXT NOT NULL,           -- aws, gcp, azure
-  title TEXT NOT NULL,
-  description TEXT,
-  url TEXT,
-  category TEXT,
-  pub_date TEXT,
+  csp TEXT NOT NULL,
+  url TEXT NOT NULL,
+  title_en TEXT NOT NULL,
+  description_en TEXT,
+  pub_date TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(csp, url)
 );
 
--- Translations table (multi-language summaries)
-CREATE TABLE IF NOT EXISTS translations (
+-- Denormalized read table: all languages including English
+CREATE TABLE IF NOT EXISTS localized_content (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   article_id INTEGER NOT NULL REFERENCES articles(id),
-  lang TEXT NOT NULL,          -- ko, ja, en, zh
+  csp TEXT NOT NULL,
+  lang TEXT NOT NULL,
+  url TEXT NOT NULL,
+  pub_date TEXT NOT NULL,
   title TEXT NOT NULL,
   summary TEXT,
   target TEXT,
@@ -27,7 +29,7 @@ CREATE TABLE IF NOT EXISTS translations (
   UNIQUE(article_id, lang)
 );
 
+-- Hot-path indexes: no JOIN needed
+CREATE INDEX IF NOT EXISTS idx_lc_lang_csp_date ON localized_content(lang, csp, pub_date DESC);
+CREATE INDEX IF NOT EXISTS idx_lc_lang_date ON localized_content(lang, pub_date DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_csp ON articles(csp);
-CREATE INDEX IF NOT EXISTS idx_articles_pub_date ON articles(pub_date DESC);
-CREATE INDEX IF NOT EXISTS idx_translations_lang ON translations(lang);
-CREATE INDEX IF NOT EXISTS idx_translations_article ON translations(article_id);
