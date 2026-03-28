@@ -6,7 +6,7 @@ const { csp } = Astro.params;
 const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
-const API_BASE = import.meta.env.WORKER_URL || 'https://api.whats-new.kr';
+const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
 const names: Record<string, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
 
 let articles: any[] = [];
