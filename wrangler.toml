@@ -1,0 +1,16 @@
+name = "cloud-whats-new"
+compatibility_date = "2026-03-01"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "cloud-whats-new"
+database_id = "" # Will be filled after `wrangler d1 create`
+
+# Cron trigger: every 6 hours
+[triggers]
+crons = ["0 */6 * * *"]
+
+# AI Gateway
+[ai]
+binding = "AI"
