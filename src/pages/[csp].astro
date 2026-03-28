@@ -2,21 +2,26 @@
 import Layout from '../layouts/Layout.astro';
 import UpdateCardCloudscape from '../components/UpdateCardCloudscape.astro';
 
+const { csp } = Astro.params;
+const valid = ['aws', 'gcp', 'azure'];
+if (!csp || !valid.includes(csp)) return Astro.redirect('/');
+
 const API_BASE = import.meta.env.WORKER_URL || 'https://api.whats-new.kr';
+const names: Record<string, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
 
 let articles: any[] = [];
 try {
-  const res = await fetch(`${API_BASE}/api/articles?lang=ko&limit=60`);
+  const res = await fetch(`${API_BASE}/api/articles?csp=${csp}&lang=ko&limit=50`);
   articles = (await res.json()).items || [];
 } catch (e) { console.error(e); }
 ---
 
-<Layout title="Cloud What's New — 클라우드 최신 업데이트" vendor="home">
+<Layout title={`${names[csp]} What's New`} vendor={csp}>
   <div class="text-center mb-8">
     <h1 class="text-3xl font-bold mb-2" style="color: var(--color-text-primary);">
-      ☁️ Cloud What's New
+      {names[csp]} What's New
     </h1>
-    <p style="color: var(--color-text-secondary);">AWS · GCP · Azure 최신 업데이트를 한국어로</p>
+    <p style="color: var(--color-text-secondary);">{names[csp]} 최신 업데이트를 한국어로</p>
   </div>
 
   <div class="max-w-md mx-auto mb-8">
@@ -36,7 +41,7 @@ try {
   </div>
 
   {articles.length === 0 && (
-    <p class="text-center py-16" style="color: var(--color-text-secondary);">데이터를 불러오는 중...</p>
+    <p class="text-center py-16" style="color: var(--color-text-secondary);">업데이트가 없습니다.</p>
   )}
 
   <script>

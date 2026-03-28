@@ -1,0 +1,88 @@
+/* === Vendor Themes — based on each CSP's design system === */
+
+/* Home — vendor-neutral */
+[data-vendor="home"] {
+  --color-primary: #4F6CF7;
+  --color-accent: #9B59F5;
+  --color-bg: #F9FAFB;
+  --color-surface: #FFFFFF;
+  --color-border: #E4E7EC;
+  --color-text-primary: #101828;
+  --color-text-secondary: #667085;
+}
+[data-vendor="home"][data-theme="dark"] {
+  --color-primary: #7B93FF;
+  --color-accent: #BB86FC;
+  --color-bg: #0F1117;
+  --color-surface: #1A1D27;
+  --color-border: #2D3148;
+  --color-text-primary: #F4F4F6;
+  --color-text-secondary: #8B8FA8;
+}
+
+/* AWS Cloudscape */
+[data-vendor="aws"] {
+  --color-primary: #0972D3;
+  --color-accent: #FF9900;
+  --color-bg: #FFFFFF;
+  --color-surface: #F2F3F3;
+  --color-border: #C6C6CD;
+  --color-text-primary: #000716;
+  --color-text-secondary: #5F6B7A;
+}
+[data-vendor="aws"][data-theme="dark"] {
+  --color-primary: #539FE5;
+  --color-accent: #FF9900;
+  --color-bg: #0F1B2D;
+  --color-surface: #192534;
+  --color-border: #354150;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #8D99A5;
+}
+
+/* GCP Material / Google Cloud */
+[data-vendor="gcp"] {
+  --color-primary: #1A73E8;
+  --color-accent: #34A853;
+  --color-bg: #FFFFFF;
+  --color-surface: #F8F9FA;
+  --color-border: #DADCE0;
+  --color-text-primary: #202124;
+  --color-text-secondary: #5F6368;
+}
+[data-vendor="gcp"][data-theme="dark"] {
+  --color-primary: #8AB4F8;
+  --color-accent: #81C995;
+  --color-bg: #202124;
+  --color-surface: #292A2D;
+  --color-border: #3C4043;
+  --color-text-primary: #E8EAED;
+  --color-text-secondary: #9AA0A6;
+}
+
+/* Azure Fluent UI */
+[data-vendor="azure"] {
+  --color-primary: #0078D4;
+  --color-accent: #0F6CBD;
+  --color-bg: #FAF9F8;
+  --color-surface: #FFFFFF;
+  --color-border: #EDEBE9;
+  --color-text-primary: #242424;
+  --color-text-secondary: #616161;
+}
+[data-vendor="azure"][data-theme="dark"] {
+  --color-primary: #479EF5;
+  --color-accent: #2886DE;
+  --color-bg: #1C1C1C;
+  --color-surface: #242424;
+  --color-border: #3D3D3D;
+  --color-text-primary: #F7F7F7;
+  --color-text-secondary: #ADADAD;
+}
+
+/* === Base styles using CSS variables === */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+}
