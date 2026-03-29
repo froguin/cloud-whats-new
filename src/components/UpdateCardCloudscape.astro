@@ -104,3 +104,22 @@ const hasDetails = !!(target || features || regions);
     -webkit-line-clamp: unset !important;
   }
 </style>
+
+<script>
+  // Mobile: first tap expands, second tap navigates
+  if ('ontouchstart' in window) {
+    document.querySelectorAll('.aws-card,.gcp-card,.azure-card').forEach(card => {
+      let expanded = false;
+      card.addEventListener('click', (e) => {
+        if (!expanded) {
+          e.preventDefault();
+          card.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
+            el.style.webkitLineClamp = 'unset';
+          });
+          expanded = true;
+        }
+        // second tap: default link behavior
+      });
+    });
+  }
+</script>
