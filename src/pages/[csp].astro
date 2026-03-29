@@ -7,7 +7,7 @@ const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
 const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
-const names: Record<string, string> = { aws: 'Amazon Web Services', gcp: 'Google Cloud', azure: 'Microsoft Azure' };
+const names: Record<string, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
 
 let articles: any[] = [];
 try {
@@ -17,36 +17,29 @@ try {
 ---
 
 <Layout title={`${names[csp]} What's New`} vendor={csp}>
-  <div class="text-center mb-8">
-    <h1 class="text-3xl font-bold mb-2" style="color: var(--color-text-primary);">
-      {names[csp]} What's New
-    </h1>
-    <p style="color: var(--color-text-secondary);">{names[csp]} 최신 업데이트를 한국어로</p>
-  </div>
-
-  <div class="max-w-md mx-auto mb-8">
+  <div class="max-w-md mx-auto mb-6">
     <input type="text" id="search" placeholder="검색..."
-      class="w-full px-4 py-2 rounded-lg outline-none transition-colors"
+      class="w-full px-4 py-2 text-sm rounded-lg outline-none transition-colors"
       style="border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary);" />
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start" id="cards">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-start" id="cards">
     {articles.map(a => (
       <UpdateCardCloudscape
         title={a.title} csp={a.csp}
-        date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
+        date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
         content={a.summary || ''} target={a.target} features={a.features}
         regions={a.regions} status={a.status} originalLink={a.url} />
     ))}
   </div>
 
   {articles.length === 0 && (
-    <p class="text-center py-16" style="color: var(--color-text-secondary);">업데이트가 없습니다.</p>
+    <p class="text-center py-16 text-sm" style="color: var(--color-text-secondary);">업데이트가 없습니다.</p>
   )}
 
   <script>
     const s = document.getElementById('search') as HTMLInputElement;
-    const c = document.querySelectorAll('#cards > article');
+    const c = document.querySelectorAll('#cards > div');
     s?.addEventListener('input', () => {
       const q = s.value.toLowerCase();
       c.forEach(el => { (el as HTMLElement).style.display = (el.textContent?.toLowerCase() || '').includes(q) ? '' : 'none'; });

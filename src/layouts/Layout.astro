@@ -8,7 +8,7 @@ interface Props {
 }
 
 const { title, vendor = 'home' } = Astro.props;
-const cspNames: Record<string, string> = { home: 'Cloud What\'s New', aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
+const cspNames: Record<string, string> = { home: 'Cloud What\'s New', aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
 const cspColors: Record<string, string> = { aws: '#FF9900', gcp: '#1A73E8', azure: '#0078D4' };
 ---
 
@@ -28,7 +28,7 @@ const cspColors: Record<string, string> = { aws: '#FF9900', gcp: '#1A73E8', azur
     <header style={`background-color: var(--nav-bg); height: var(--nav-height); border-bottom: 1px solid var(--color-border);`}>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex justify-between items-center">
         <a href="/" class="text-lg font-bold" style={`color: ${vendor === 'aws' || vendor === 'home' ? '#FFFFFF' : 'var(--color-text-primary)'};`}>
-          What's New
+          ☁️ What's New
         </a>
         <nav class="flex items-center gap-1.5">
           {(['aws', 'gcp', 'azure'] as const).map(c => (
@@ -52,7 +52,7 @@ const cspColors: Record<string, string> = { aws: '#FF9900', gcp: '#1A73E8', azur
     </main>
     <footer style="background-color: var(--color-surface); border-top: 1px solid var(--color-border);" class="mt-8">
       <div class="max-w-7xl mx-auto py-4 px-4 text-center text-xs" style="color: var(--color-text-secondary);">
-        © {new Date().getFullYear()} Cloud What's New. Not affiliated with AWS, Google Cloud, or Microsoft Azure.
+        © {new Date().getFullYear()} Cloud ☁️ What's New. Not affiliated with AWS, Google Cloud, or Microsoft Azure.
       </div>
     </footer>
     <script is:inline>
