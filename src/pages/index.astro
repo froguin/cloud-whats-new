@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
 
 const csps = [
   { id: 'aws', name: 'AWS', color: '#FF9900', accent: '#232F3E' },
-  { id: 'gcp', name: 'Google Cloud', color: '#4285F4', accent: '#34A853' },
+  { id: 'gcp', name: 'Google Cloud', color: 'linear-gradient(to right, #4285F4 25%, #EA4335 25%, #EA4335 50%, #FBBC04 50%, #FBBC04 75%, #34A853 75%)', accent: '#4285F4', isGradient: true },
   { id: 'azure', name: 'Azure', color: '#0078D4', accent: '#50E6FF' },
 ];
 
@@ -36,11 +36,11 @@ for (const c of csps) {
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
     {csps.map(c => (
       <section>
-        <div class="flex items-center justify-between mb-4 pb-2" style={`border-bottom: 3px solid ${c.color};`}>
+        <div class="flex items-center justify-between mb-4 pb-2" style={c.isGradient ? `border-image: ${c.color} 1; border-bottom: 3px solid;` : `border-bottom: 3px solid ${c.color};`}>
           <h2 class="text-base sm:text-lg font-bold" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
             {c.name}
           </h2>
-          <a href={`/${c.id}`} class="text-xs font-medium px-2 py-1 rounded" style={`color: ${c.color}; background: color-mix(in srgb, ${c.color} 10%, transparent);`}>
+          <a href={`/${c.id}`} class="text-xs font-medium px-2 py-1 rounded" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
             모두 보기 →
           </a>
         </div>
@@ -51,7 +51,7 @@ for (const c of csps) {
                 class="block py-3 px-1 no-underline transition-colors hover:bg-black/[0.02]"
                 style="font-family: 'Pretendard Variable', var(--font-family);">
                 <div class="flex items-start gap-2">
-                  <span class="shrink-0 w-1 h-1 rounded-full mt-2" style={`background: ${c.color};`}></span>
+                  <span class="shrink-0 w-1 h-1 rounded-full mt-2" style={`background: ${c.isGradient ? c.accent : c.color};`}></span>
                   <div class="min-w-0">
                     <p class="text-sm font-medium leading-snug mb-1" style="color: var(--color-text-primary); word-break: break-word;">
                       {a.title}
