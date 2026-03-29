@@ -28,6 +28,9 @@ const cspColors: Record<string, string> = { aws: '#FF9900', gcp: '#1A73E8', azur
     <meta property="og:title" content={title} />
     <meta property="og:description" content="Amazon Web Services, Google Cloud, Microsoft Azure 클라우드 최신 업데이트를 한국어로 요약합니다." />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://cloud-whats-new.pages.dev/og.png" />
+    <meta property="og:url" content={Astro.url.href} />
+    <link rel="canonical" href={Astro.url.href} />
     <meta property="og:locale" content="ko_KR" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={title} />

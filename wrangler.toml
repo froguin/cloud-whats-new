@@ -14,3 +14,8 @@ crons = ["0 * * * *"]
 
 [ai]
 binding = "AI"
+
+# Alert webhook (Discord/Slack) — set via wrangler secret
+# wrangler secret put ALERT_WEBHOOK_URL
+[vars]
+ALERT_WEBHOOK_URL = ""

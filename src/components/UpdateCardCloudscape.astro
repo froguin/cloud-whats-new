@@ -2,10 +2,10 @@
 interface Props {
   title: string; date: string; content: string; csp?: string;
   target?: string; features?: string; regions?: string; status?: string;
-  originalLink?: string; index?: number;
+  originalLink?: string; index?: number; isFallback?: boolean; originalTitle?: string;
 }
 
-const { title, date, content, csp, target, features, regions, status, originalLink, index = 0 } = Astro.props;
+const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, isFallback = false, originalTitle } = Astro.props;
 
 let statuses: string[] = [];
 try {
@@ -33,6 +33,7 @@ const hasDetails = !!(target || features || regions);
     style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px; border-left:4px solid #0972D3;">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+        {isFallback && (<span class="px-1.5 py-0.5 rounded text-[11px] font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
         {statuses.map(s => <span class="px-1.5 py-0.5 rounded text-[11px] font-medium" style={statusColors[s] || ''}>{s}</span>)}
         {date && <time class="text-[11px] ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>

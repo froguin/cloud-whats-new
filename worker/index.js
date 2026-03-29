@@ -163,6 +163,17 @@ export default {
     const n = await fetchRSS(env);
     const t = await translateNew(env, 'ko', 25);
     console.log(`Cron: ${n} new, ${t} translated`);
+    // Alert on consecutive empty fetches
+    const webhookUrl = env.ALERT_WEBHOOK_URL;
+    if (webhookUrl && n === 0) {
+      const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
+      if (prev && prev.c === 0) {
+        await fetch(webhookUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: `⚠️ What's New: 3시간 연속 새 기사 없음. RSS 피드 확인 필요.` }),
+        }).catch(() => {});
+      }
+    }
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -177,9 +188,15 @@ export default {
       const lang = url.searchParams.get('lang') || defaultLang;
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
 
-      let query = 'SELECT * FROM localized_content WHERE lang = ?';
+      // Include untranslated articles as English fallback with is_fallback flag
+      let query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lang = ?`;
       const params = [lang];
       if (csp) { query += ' AND csp = ?'; params.push(csp); }
+      if (lang !== 'en') {
+        query += ` UNION ALL SELECT lc.*, a.title_en as original_title, 1 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lang = 'en' AND article_id NOT IN (SELECT article_id FROM localized_content WHERE lang = ?)`;
+        params.push(lang);
+        if (csp) { query += ' AND csp = ?'; params.push(csp); }
+      }
       query += ' ORDER BY pub_date DESC LIMIT ?';
       params.push(limit);
       const rows = await env.DB.prepare(query).bind(...params).all();
