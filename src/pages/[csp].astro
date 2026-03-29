@@ -24,18 +24,21 @@ const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleSt
 ---
 
 <Layout title={`${csp.toUpperCase()} What's New`} vendor={csp}>
-  <p class="text-xs sm:text-sm mb-4" style="color: var(--color-text-secondary);">
-    {names[csp]}의 <a href={rss.url} target="_blank" rel="noopener noreferrer" class="underline" style={`color: var(--color-primary);`}>최신 정보</a>를 기준으로 한국어로 요약하였습니다.
-  </p>
-  <div class="flex items-center justify-between mb-6 max-w-lg mx-auto sm:max-w-none">
+  <div class="mb-6 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+    style={`background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius);`}>
+    <div class="flex flex-col gap-1">
+      <p class="text-xs sm:text-sm" style="color: var(--color-text-secondary);">
+        {names[csp]}의 <a href={rss.url} target="_blank" rel="noopener noreferrer" class="underline font-medium" style={`color: var(--color-primary);`}>최신 정보</a>를 기준으로 한국어로 요약하였습니다.
+      </p>
+      {latest && (
+        <span class="text-[11px]" style="color: var(--color-text-secondary);">
+          최종 업데이트: {latest}
+        </span>
+      )}
+    </div>
     <input type="text" id="search" placeholder="검색..."
-      class="flex-1 px-4 py-2 text-sm rounded-lg outline-none transition-colors"
-      style="border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary);" />
-    {latest && (
-      <span class="text-[11px] ml-3 shrink-0 hidden sm:inline" style="color: var(--color-text-secondary);">
-        최종 업데이트: {latest}
-      </span>
-    )}
+      class="w-full sm:w-64 px-3 py-1.5 text-sm rounded outline-none transition-colors shrink-0"
+      style={`border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); border-radius: var(--radius);`} />
   </div>
   </div>
 
