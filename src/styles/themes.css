@@ -36,9 +36,9 @@
 }
 [data-vendor="aws"][data-theme="dark"] {
   --color-primary: #539FE5; --color-accent: #FF9900;
-  --color-bg: #0F1B2D; --color-surface: #192534; --color-border: #354150;
+  --color-bg: #1A2332; --color-surface: #1F2D3D; --color-border: #354150;
   --color-text-primary: #D1D5DB; --color-text-secondary: #8D99A5;
-  --nav-bg: #161E2D; --card-border: 2px solid #354150; --card-hover-border: 2px solid #539FE5;
+  --nav-bg: #1A2332; --card-border: 2px solid #354150; --card-hover-border: 2px solid #539FE5;
 }
 
 /* ============================================
