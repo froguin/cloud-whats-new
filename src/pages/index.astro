@@ -4,9 +4,9 @@ import Layout from '../layouts/Layout.astro';
 const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
 
 const csps = [
-  { id: 'aws', name: 'AWS', color: '#FF9900', accent: '#232F3E' },
+  { id: 'aws', name: 'Amazon Web Services', color: '#FF9900', accent: '#232F3E' },
   { id: 'gcp', name: 'Google Cloud', color: 'linear-gradient(to right, #4285F4 25%, #EA4335 25%, #EA4335 50%, #FBBC04 50%, #FBBC04 75%, #34A853 75%)', accent: '#4285F4', isGradient: true },
-  { id: 'azure', name: 'Azure', color: '#0078D4', accent: '#50E6FF' },
+  { id: 'azure', name: 'Microsoft Azure', color: '#0078D4', accent: '#50E6FF' },
 ];
 
 const data: Record<string, any[]> = {};

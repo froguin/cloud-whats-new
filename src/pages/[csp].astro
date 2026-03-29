@@ -18,7 +18,7 @@ const rssLinks: Record<string, { name: string; url: string }> = {
   gcp: { name: 'Google Cloud Release Notes', url: 'https://cloud.google.com/release-notes' },
   azure: { name: 'Azure Updates', url: 'https://azure.microsoft.com/en-us/updates/' },
 };
-const names: Record<string, string> = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Microsoft Azure' };
+const names: Record<string, string> = { aws: 'Amazon Web Services', gcp: 'Google Cloud', azure: 'Microsoft Azure' };
 const rss = rssLinks[csp];
 const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 ---

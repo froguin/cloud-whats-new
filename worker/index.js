@@ -76,7 +76,7 @@ async function fetchRSS(env) {
       if (!resp.ok) continue;
       const xml = await resp.text();
       if (!xml.includes('<')) continue;
-      const items = parseRSS(xml, csp).slice(0, 30);
+      const items = parseRSS(xml, csp).slice(0, 100);
       for (const item of items) {
         if (!item.url && !item.title) continue;
         // Insert into articles (source of truth)
@@ -128,6 +128,10 @@ async function translateNew(env, lang = 'ko', limit = 10) {
       });
       const parsed = safeParseJSON(aiResp.response || '');
       if (!parsed || !parsed.title) continue;
+      // Strip status markers from translated title
+      const cleanTitle = parsed.title
+        .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
+        .replace(/\s+/g, ' ').trim();
       const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
       const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
       // Force-normalize status: only allow known values
@@ -141,7 +145,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
       const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
       await env.DB.prepare(
         'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-      ).bind(row.id, row.csp, lang, row.url, row.pub_date, parsed.title, parsed.summary || '',
+      ).bind(row.id, row.csp, lang, row.url, row.pub_date, cleanTitle, parsed.summary || '',
              parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
       translated++;
     } catch (e) {
@@ -154,7 +158,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
 export default {
   async scheduled(event, env, ctx) {
     const n = await fetchRSS(env);
-    const t = await translateNew(env, 'ko', 15);
+    const t = await translateNew(env, 'ko', 25);
     console.log(`Cron: ${n} new, ${t} translated`);
   },
   async fetch(request, env) {
@@ -168,7 +172,7 @@ export default {
       const accept = request.headers.get('Accept-Language') || '';
       const defaultLang = accept.startsWith('ja') ? 'ja' : accept.startsWith('en') ? 'en' : 'ko';
       const lang = url.searchParams.get('lang') || defaultLang;
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '30'), 100);
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
 
       let query = 'SELECT * FROM localized_content WHERE lang = ?';
       const params = [lang];
@@ -181,7 +185,7 @@ export default {
 
     if (path === '/api/trigger' && request.method === 'POST') {
       const n = await fetchRSS(env);
-      const t = await translateNew(env, 'ko', 15);
+      const t = await translateNew(env, 'ko', 25);
       return new Response(JSON.stringify({ newArticles: n, translated: t }), { headers });
     }
 
