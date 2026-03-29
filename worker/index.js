@@ -188,14 +188,17 @@ export default {
       const lang = url.searchParams.get('lang') || defaultLang;
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
 
-      // Include untranslated articles as English fallback with is_fallback flag
-      let query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lang = ?`;
-      const params = [lang];
-      if (csp) { query += ' AND csp = ?'; params.push(csp); }
-      if (lang !== 'en') {
-        query += ` UNION ALL SELECT lc.*, a.title_en as original_title, 1 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lang = 'en' AND article_id NOT IN (SELECT article_id FROM localized_content WHERE lang = ?)`;
-        params.push(lang);
-        if (csp) { query += ' AND csp = ?'; params.push(csp); }
+      // Include untranslated articles as English fallback
+      let query, params;
+      if (lang === 'en' || !csp) {
+        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ?`;
+        params = [lang];
+        if (csp) { query += ' AND lc.csp = ?'; params.push(csp); }
+      } else {
+        query = `SELECT lc.*, a.title_en as original_title, 0 as is_fallback FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = ? AND lc.csp = ?
+          UNION ALL
+          SELECT lc2.*, a2.title_en as original_title, 1 as is_fallback FROM localized_content lc2 JOIN articles a2 ON lc2.article_id = a2.id WHERE lc2.lang = 'en' AND lc2.csp = ? AND lc2.article_id NOT IN (SELECT article_id FROM localized_content WHERE lang = ? AND csp = ?)`;
+        params = [lang, csp, csp, lang, csp];
       }
       query += ' ORDER BY pub_date DESC LIMIT ?';
       params.push(limit);
