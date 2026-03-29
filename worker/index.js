@@ -170,11 +170,14 @@ async function translateNew(env, lang = 'ko', limit = 10) {
 export default {
   async scheduled(event, env, ctx) {
     const n = await fetchRSS(env);
-    const t = await translateNew(env, 'ko', 25);
-    // Cleanup: delete articles older than 30 days
-    await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
-    await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
-    console.log(`Cron: ${n} new, ${t} translated`);
+    // Run translation asynchronously so fetch doesn't block it
+    ctx.waitUntil((async () => {
+      const t = await translateNew(env, 'ko', 25);
+      console.log(`Cron: ${n} new, ${t} translated`);
+      // Cleanup: delete articles older than 30 days
+      await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
+      await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
+    })());
     // Alert on consecutive empty fetches
     const webhookUrl = env.ALERT_WEBHOOK_URL;
     if (webhookUrl && n === 0) {
