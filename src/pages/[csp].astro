@@ -13,10 +13,20 @@ try {
   const res = await fetch(`${API_BASE}/api/articles?csp=${csp}&lang=ko&limit=50`);
   articles = (await res.json()).items || [];
 } catch (e) { console.error(e); }
+const rssLinks: Record<string, { name: string; url: string }> = {
+  aws: { name: 'AWS What\'s New', url: 'https://aws.amazon.com/new/' },
+  gcp: { name: 'Google Cloud Release Notes', url: 'https://cloud.google.com/release-notes' },
+  azure: { name: 'Azure Updates', url: 'https://azure.microsoft.com/en-us/updates/' },
+};
+const names: Record<string, string> = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
+const rss = rssLinks[csp];
 const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 ---
 
 <Layout title={`${csp.toUpperCase()} What's New`} vendor={csp}>
+  <p class="text-xs sm:text-sm mb-4" style="color: var(--color-text-secondary);">
+    {names[csp]}의 <a href={rss.url} target="_blank" rel="noopener noreferrer" class="underline" style={`color: var(--color-primary);`}>최신 정보</a>를 기준으로 한국어로 요약하였습니다.
+  </p>
   <div class="flex items-center justify-between mb-6 max-w-lg mx-auto sm:max-w-none">
     <input type="text" id="search" placeholder="검색..."
       class="flex-1 px-4 py-2 text-sm rounded-lg outline-none transition-colors"
