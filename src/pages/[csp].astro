@@ -7,7 +7,7 @@ const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
 const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
-const names: Record<string, string> = { aws: 'Amazon Web Services', gcp: 'Google Cloud Platform', azure: 'Microsoft Azure' };
+const names: Record<string, string> = { aws: 'Amazon Web Services', gcp: 'Google Cloud', azure: 'Microsoft Azure' };
 
 let articles: any[] = [];
 try {

@@ -34,51 +34,69 @@ const cspBadge: Record<string, { label: string; bg: string; text: string }> = {
   azure: { label: 'Azure', bg: '#0078D4', text: '#FFFFFF' },
 };
 const badge = csp ? cspBadge[csp] : null;
+const hasDetails = !!(target || features || regions);
 ---
 
-<a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-  class="card-link block group overflow-hidden no-underline transition-all duration-200"
-  style={`background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);box-shadow:var(--card-shadow);`}>
-  <div class="p-4">
-    <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+<div class="card-wrapper group" style={`background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);box-shadow:var(--card-shadow);overflow:hidden;transition:all 0.2s;`}>
+  <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer" class="block no-underline p-4 sm:p-5">
+    <div class="flex items-center gap-1.5 mb-2.5 flex-wrap">
       {badge && (
-        <span class="px-1.5 py-0.5 rounded text-[11px] font-bold leading-none" style={`background:${badge.bg};color:${badge.text};`}>
+        <span class="px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-bold leading-none" style={`background:${badge.bg};color:${badge.text};`}>
           {badge.label}
         </span>
       )}
       {statuses.map(s => (
-        <span class="px-1.5 py-0.5 rounded text-[11px] font-medium leading-none" style={statusColors[s] || `background:color-mix(in srgb,var(--color-primary) 15%,transparent);color:var(--color-primary);`}>
+        <span class="px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-medium leading-none" style={statusColors[s] || `background:color-mix(in srgb,var(--color-primary) 15%,transparent);color:var(--color-primary);`}>
           {s}
         </span>
       ))}
-      {date && <time class="text-[11px] ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+      {date && <time class="text-[11px] sm:text-xs ml-auto shrink-0" style="color:var(--color-text-secondary);">{date}</time>}
     </div>
 
-    <h3 class="text-sm font-bold mb-2 leading-snug line-clamp-2 group-hover:line-clamp-none" style="color:var(--color-text-primary);word-break:break-word;">
+    <h3 class="text-sm sm:text-base font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">
       {title}
     </h3>
 
-    <p class="text-xs leading-relaxed line-clamp-3 group-hover:line-clamp-none" style="color:var(--color-text-secondary);">
+    <p class="text-xs sm:text-sm leading-relaxed" style="color:var(--color-text-secondary);">
       {content}
     </p>
-  </div>
+  </a>
 
-  {(target || features || regions) && (
-    <div class="px-4 pb-3 space-y-1 text-[11px] hidden group-hover:block" style="border-top:1px solid var(--color-border);padding-top:8px;">
-      {target && <div><span class="font-medium" style="color:var(--color-primary);">대상</span> <span style="color:var(--color-text-secondary);">{target}</span></div>}
-      {features && <div><span class="font-medium" style="color:var(--color-primary);">기능</span> <span style="color:var(--color-text-secondary);">{features}</span></div>}
-      {regions && <div><span class="font-medium" style="color:var(--color-primary);">리전</span> <span style="color:var(--color-text-secondary);">{regions}</span></div>}
+  {hasDetails && (
+    <div class="details-section" style="border-top:1px solid var(--color-border);">
+      <!-- Mobile: always visible, toggle with tap -->
+      <button class="details-toggle w-full px-4 sm:px-5 py-2 text-left text-xs font-medium sm:hidden" style="color:var(--color-primary);background:transparent;border:none;cursor:pointer;">
+        상세 정보 ▾
+      </button>
+      <div class="details-content px-4 sm:px-5 pb-3 pt-1 space-y-1 text-[11px] sm:text-xs hidden sm:hidden group-hover:sm:block">
+        {target && <div><span class="font-semibold" style="color:var(--color-primary);">대상</span> <span style="color:var(--color-text-secondary);">{target}</span></div>}
+        {features && <div><span class="font-semibold" style="color:var(--color-primary);">기능</span> <span style="color:var(--color-text-secondary);">{features}</span></div>}
+        {regions && <div><span class="font-semibold" style="color:var(--color-primary);">리전</span> <span style="color:var(--color-text-secondary);">{regions}</span></div>}
+      </div>
     </div>
   )}
-
-  <div class="px-4 py-2 text-xs font-medium transition-colors" style="border-top:1px solid var(--color-border);color:var(--color-primary);">
-    자세히 보기 →
-  </div>
-</a>
+</div>
 
 <style>
-  .card-link:hover {
+  .card-wrapper:hover {
     box-shadow: var(--card-hover-shadow) !important;
     transform: translateY(-2px);
   }
+  @media (min-width: 640px) {
+    .details-toggle { display: none !important; }
+    .details-content { display: none !important; }
+    .card-wrapper:hover .details-content { display: block !important; }
+  }
 </style>
+
+<script>
+  document.querySelectorAll('.details-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const content = btn.nextElementSibling as HTMLElement;
+      const isOpen = !content.classList.contains('hidden');
+      content.classList.toggle('hidden');
+      btn.textContent = isOpen ? '상세 정보 ▾' : '상세 정보 ▴';
+    });
+  });
+</script>
