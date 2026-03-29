@@ -127,7 +127,15 @@ async function translateNew(env, lang = 'ko', limit = 10) {
       if (!parsed || !parsed.title) continue;
       const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
       const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
-      const stat = Array.isArray(parsed.status) ? JSON.stringify(parsed.status) : JSON.stringify([parsed.status || '정식 출시']);
+      // Force-normalize status: only allow known values
+      const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
+      let rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
+      const cleanStatus = [...new Set(rawStatus.flatMap(s => {
+        // Extract valid status from strings like "Vertex AI: 정식 출시"
+        for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; }
+        return [];
+      }))];
+      const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
       await env.DB.prepare(
         'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
       ).bind(row.id, row.csp, lang, row.url, row.pub_date, parsed.title, parsed.summary || '',
