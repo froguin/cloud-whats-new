@@ -166,6 +166,9 @@ export default {
   async scheduled(event, env, ctx) {
     const n = await fetchRSS(env);
     const t = await translateNew(env, 'ko', 25);
+    // Cleanup: delete articles older than 30 days
+    await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
+    await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
     console.log(`Cron: ${n} new, ${t} translated`);
     // Alert on consecutive empty fetches
     const webhookUrl = env.ALERT_WEBHOOK_URL;
@@ -214,6 +217,15 @@ export default {
       const n = await fetchRSS(env);
       const t = await translateNew(env, 'ko', 25);
       return new Response(JSON.stringify({ newArticles: n, translated: t }), { headers });
+    }
+
+    // POST /api/retranslate?id=123 — delete existing ko translation and re-translate
+    if (path === '/api/retranslate' && request.method === 'POST') {
+      const id = url.searchParams.get('id');
+      if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
+      await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).run();
+      const t = await translateNew(env, 'ko', 1);
+      return new Response(JSON.stringify({ retranslated: t, article_id: id }), { headers });
     }
 
     if (path === '/api/stats') {
