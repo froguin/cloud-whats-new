@@ -41,7 +41,8 @@ function parseRSS(xml, csp) {
     const url = isAtom
       ? ((block.match(/<link[^>]*href="([^"]*)"/) || [])[1] || '')
       : (get('link') || get('guid'));
-    const pubDate = get('pubDate') || get('updated') || get('published') || '';
+    const rawDate = get('pubDate') || get('updated') || get('published') || '';
+    const pubDate = rawDate ? new Date(rawDate).toISOString() : '';
     const rawContent = isAtom ? get('content') : get('description');
     const rawTitle = get('title').replace(/<[^>]+>/g, '');
 

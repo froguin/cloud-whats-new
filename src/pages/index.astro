@@ -13,7 +13,7 @@ const data: Record<string, any[]> = {};
 let latestDate = '';
 for (const c of csps) {
   try {
-    const res = await fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=8`);
+    const res = await fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=30`);
     data[c.id] = (await res.json()).items || [];
     for (const a of data[c.id]) {
       if (a.pub_date && a.pub_date > latestDate) latestDate = a.pub_date;
