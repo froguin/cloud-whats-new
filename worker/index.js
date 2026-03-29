@@ -7,20 +7,23 @@ const RSS_FEEDS = {
 const SYSTEM_PROMPT = `You are a Korean cloud technology translator. Translate cloud service updates to Korean JSON.
 
 RULES:
-- Keep ALL product/service names in English (AWS Lambda, Google Cloud Run, Azure Functions, Amazon S3, etc.)
-- Keep region codes in English (us-east-1, asia-northeast3, etc.)
-- Summary: exactly 3-4 sentences in Korean, concise and complete
-- Output ONLY valid JSON, no markdown, no explanation
+- Keep ALL product/service names in English (AWS Lambda, Google Cloud Run, Azure Functions, etc.)
+- Keep region codes in English (us-east-1, ap-northeast-2, etc.)
+- Write like a Korean tech blog, NOT machine translation
+- Output ONLY valid JSON, no markdown
 
-OUTPUT FORMAT:
-{"title":"Korean title (product names stay English). For GCP date-based entries, format as 'YYYY년 M월 D일: 제품1, 제품2 업데이트' (colon after date is mandatory)","summary":"3-4 sentence Korean summary","target":"이 업데이트가 도움이 되는 대상을 한국어 문장으로 설명","features":"key features in Korean, comma separated","regions":"원문에 리전이 명시되어 있으면 그대로 나열. 명시되지 않았으면 모든 리전","status":["ONLY pure status values, NEVER include product names. Valid: 정식 출시, 미리보기, 베타, 지원 종료. WRONG: Cloud Run: 미리보기. RIGHT: 미리보기"]}`;
+OUTPUT FORMAT (JSON):
+{"title":"한국어로 자연스럽게 다듬기. 제품명 영문 유지. 제목에 포함된 상태 표기([Launched], [Preview], (Preview), (미리보기), (GA), Generally Available 등)는 제거하고 status 필드에만 반영. GCP 날짜형은 YYYY년 M월 D일: 핵심제품 외 N건","summary":"정확히 2문장. 첫 문장: 제목 절대 반복 금지 — 무엇이 가능해졌는지 곧바로 서술. 둘째 문장: 실무에서 왜 중요한지. GCP 다제품: 임팩트 큰 1-2개에 집중하고 나머지는 외 N개 서비스 업데이트 포함으로 마무리","target":"이 변경을 지금 검토해야 할 사람을 역할+구체적 맥락으로 1줄. 개발자/엔지니어 단독 사용 금지. 예: GKE에서 멀티테넌트 클러스터를 운영하는 플랫폼 엔지니어","features":"정확히 3개, 쉼표 구분. ~할 수 있다/~가 줄어든다 등 동사형 효과. 제품명 단순 나열 금지","regions":"원문에 명시된 리전 그대로. 없으면 모든 리전","status":["상태값만 배열로. 제품명 포함 금지. 유효값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
+
 const FEW_SHOT = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
-  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"AWS Lambda가 Python 3.13 런타임을 공식 지원합니다. 개선된 오류 메시지, 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 Lambda 함수에서 활용할 수 있습니다. Lambda가 제공되는 모든 AWS 리전에서 즉시 사용 가능합니다.","target":"서버리스 애플리케이션을 Python으로 개발하는 백엔드 개발자","features":"Python 3.13 런타임, 개선된 오류 메시지, 새로운 REPL, 성능 향상","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"함수 생성·업데이트 시 Python 3.13 런타임 선택 가능, 디버깅 시 더 명확한 오류 메시지 확인 가능, 런타임 수준의 성능 개선으로 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: Cloud Run now supports GPU acceleration (Preview)\nDescription: You can now attach NVIDIA L4 GPUs to your Cloud Run services for AI/ML inference workloads. GPU-enabled services are available in us-central1 and europe-west4.' },
-  { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"Cloud Run 서비스에 NVIDIA L4 GPU를 연결하여 AI/ML 추론 워크로드를 실행할 수 있습니다. GPU 지원을 통해 Cloud Run에서 직접 머신러닝 모델을 서빙할 수 있게 되었습니다. 현재 us-central1과 europe-west4 리전에서 Preview로 제공됩니다.","target":"Cloud Run에서 AI/ML 추론 워크로드를 실행하려는 ML 엔지니어 및 백엔드 개발자","features":"NVIDIA L4 GPU 연결, AI/ML 추론 워크로드 지원","regions":"us-central1, europe-west4","status":["미리보기"]}' },
+  { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"별도 인프라 구성 없이 Cloud Run 서비스에 NVIDIA L4 GPU를 연결해 AI/ML 추론을 실행할 수 있게 되었습니다. 서버리스 환경에서 GPU 워크로드를 처리하려는 팀에게 인프라 관리 부담을 크게 줄여줍니다.","target":"Cloud Run에서 ML 모델 서빙을 검토 중인 ML 엔지니어","features":"컨테이너에 NVIDIA L4 GPU 직접 연결 가능, 서버리스 환경에서 AI 추론 파이프라인 구축 가능, 기존 Cloud Run 배포 워크플로 그대로 GPU 서비스 배포 가능","regions":"us-central1, europe-west4","status":["미리보기"]}' },
+  { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed. Document AI: New OCR model available in Preview.' },
+  { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 리전 제한 외 2건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 해당 리전 사용자는 Cloud Composer 3으로 전환이 필요합니다. 이 외에도 Compute Engine 보안 패치와 Document AI OCR 모델 프리뷰 등 업데이트가 포함되어 있습니다.","target":"australia-southeast2 리전에서 Cloud Composer 환경을 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Cloud Composer 2 신규 생성 중단으로 마이그레이션 필요, Compute Engine CVE-2026-23268 보안 취약점 패치 적용, Document AI에서 새로운 OCR 모델 프리뷰 사용 가능","regions":"australia-southeast2 (Cloud Composer), 모든 리전 (Compute Engine, Document AI)","status":["정식 출시","미리보기"]}' },
   { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions. Generally available.' },
-  { role: 'assistant', content: '{"title":"Azure Kubernetes Service (AKS)에서 Kubernetes 1.31 지원","summary":"Azure Kubernetes Service (AKS)가 Kubernetes 1.31을 정식 지원합니다. 사이드카 컨테이너 지원 개선, 향상된 Pod 라이프사이클 관리, 새로운 스케줄링 기능이 포함되었습니다. 모든 Azure 퍼블릭 리전에서 정식 제공됩니다.","target":"AKS에서 컨테이너 워크로드를 운영하는 DevOps 엔지니어 및 플랫폼 팀","features":"Kubernetes 1.31, 사이드카 컨테이너 개선, Pod 라이프사이클 관리, 스케줄링 기능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"Azure Kubernetes Service (AKS)에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
 function parseRSS(xml, csp) {
