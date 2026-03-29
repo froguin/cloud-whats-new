@@ -224,8 +224,36 @@ export default {
       const id = url.searchParams.get('id');
       if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).run();
-      const t = await translateNew(env, 'ko', 1);
-      return new Response(JSON.stringify({ retranslated: t, article_id: id }), { headers });
+      // Translate this specific article
+      const row = await env.DB.prepare('SELECT id, csp, url, pub_date, title_en, description_en FROM articles WHERE id = ?').bind(id).first();
+      if (!row) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
+      try {
+        const titleForLLM = row.title_en.length < 20 ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}` : row.title_en;
+        const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
+        const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
+          max_tokens: 768, temperature: 0.1,
+        });
+        const parsed = safeParseJSON(aiResp.response || '');
+        if (parsed && parsed.title) {
+          let cleanTitle = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+          if (cleanTitle.length < 25 && parsed.summary) {
+            const first = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
+            if (first.length > cleanTitle.length) cleanTitle = cleanTitle + ': ' + first;
+          }
+          const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
+          const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
+          const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
+          let rawSt = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
+          const cleanSt = [...new Set(rawSt.flatMap(s => { for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; } return []; }))];
+          const stat = JSON.stringify(cleanSt.length ? cleanSt : ['정식 출시']);
+          await env.DB.prepare(
+            'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+          ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '', parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
+          return new Response(JSON.stringify({ retranslated: 1, title: cleanTitle }), { headers });
+        }
+      } catch (e) { console.error(e); }
+      return new Response(JSON.stringify({ retranslated: 0, error: 'translation failed' }), { headers });
     }
 
     if (path === '/api/stats') {
