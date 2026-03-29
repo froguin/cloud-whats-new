@@ -13,13 +13,20 @@ try {
   const res = await fetch(`${API_BASE}/api/articles?csp=${csp}&lang=ko&limit=50`);
   articles = (await res.json()).items || [];
 } catch (e) { console.error(e); }
+const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 ---
 
 <Layout title={`${csp.toUpperCase()} What's New`} vendor={csp}>
-  <div class="max-w-lg mx-auto mb-6">
+  <div class="flex items-center justify-between mb-6 max-w-lg mx-auto sm:max-w-none">
     <input type="text" id="search" placeholder="검색..."
-      class="w-full px-4 py-2 text-sm rounded-lg outline-none transition-colors"
+      class="flex-1 px-4 py-2 text-sm rounded-lg outline-none transition-colors"
       style="border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary);" />
+    {latest && (
+      <span class="text-[11px] ml-3 shrink-0 hidden sm:inline" style="color: var(--color-text-secondary);">
+        최종 업데이트: {latest}
+      </span>
+    )}
+  </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-start" id="cards">
