@@ -127,3 +127,8 @@ a:focus-visible, button:focus-visible {
 .aws-card:active, .gcp-card:active, .azure-card:active {
   transform: scale(0.98) !important;
 }
+
+/* Home list hover */
+[data-vendor="home"] li a:hover {
+  background: color-mix(in srgb, var(--item-color, var(--color-primary)) 6%, transparent);
+}

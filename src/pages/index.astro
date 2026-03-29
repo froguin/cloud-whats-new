@@ -48,8 +48,8 @@ for (const c of csps) {
           {(data[c.id] || []).map((a, i) => (
             <li style={`border-bottom: 1px solid var(--color-border);`}>
               <a href={a.url || '#'} target="_blank" rel="noopener noreferrer"
-                class="block py-3 px-1 no-underline transition-colors hover:bg-black/[0.02]"
-                style="font-family: 'Pretendard Variable', var(--font-family);">
+                class="block py-3 px-2 no-underline transition-all duration-150 hover:pl-3 rounded"
+                style={`font-family: 'Pretendard Variable', var(--font-family); --item-color: ${c.isGradient ? c.accent : c.color};`}>
                 <div class="flex items-start gap-2">
                   <span class="shrink-0 w-1 h-1 rounded-full mt-2" style={`background: ${c.isGradient ? c.accent : c.color};`}></span>
                   <div class="min-w-0">
