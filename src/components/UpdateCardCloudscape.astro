@@ -86,10 +86,7 @@ const hasDetails = !!(target || features || regions);
   @media (min-width: 640px) {
     .details-toggle { display: none !important; }
     .details-content { display: none !important; }
-  .card-wrapper:hover {
-    box-shadow: var(--card-hover-shadow) !important;
-    border: var(--card-hover-border) !important;
-    transform: translateY(-2px);
+    .card-wrapper:hover .details-content { display: block !important; }
   }
 </style>
 
