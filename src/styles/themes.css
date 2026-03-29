@@ -5,7 +5,7 @@
   --color-primary: #4F6CF7; --color-accent: #9B59F5;
   --color-bg: #F9FAFB; --color-surface: #FFFFFF; --color-border: #E4E7EC;
   --color-text-primary: #101828; --color-text-secondary: #667085;
-  --font-family: 'Noto Sans KR', -apple-system, sans-serif;
+  --font-family: 'Pretendard Variable', 'Noto Sans KR', -apple-system, sans-serif;
   --font-weight-title: 700;
   --radius: 12px; --nav-bg: #101828; --nav-height: 56px;
   --card-shadow: 0 1px 3px rgba(0,0,0,0.08); --card-hover-shadow: 0 8px 24px rgba(0,0,0,0.12);

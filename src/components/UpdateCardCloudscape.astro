@@ -1,24 +1,15 @@
 ---
 interface Props {
-  title: string;
-  date: string;
-  content: string;
-  csp?: string;
-  target?: string;
-  features?: string;
-  regions?: string;
-  status?: string;
-  originalLink?: string;
+  title: string; date: string; content: string; csp?: string;
+  target?: string; features?: string; regions?: string; status?: string;
+  originalLink?: string; index?: number;
 }
 
-const { title, date, content, csp, target, features, regions, status, originalLink } = Astro.props;
+const { title, date, content, csp, target, features, regions, status, originalLink, index = 0 } = Astro.props;
 
 let statuses: string[] = [];
 try {
-  if (status) {
-    const parsed = JSON.parse(status);
-    statuses = Array.isArray(parsed) ? parsed.filter((s: string) => !s.includes(':')) : [status];
-  }
+  if (status) { const p = JSON.parse(status); statuses = Array.isArray(p) ? p.filter((s: string) => !s.includes(':')) : [status]; }
 } catch { statuses = status ? [status] : []; }
 
 const statusColors: Record<string, string> = {
@@ -28,76 +19,80 @@ const statusColors: Record<string, string> = {
   '지원 종료': 'background:#fee2e2;color:#991b1b;',
 };
 
-const cspBadge: Record<string, { label: string; bg: string; text: string }> = {
-  aws:   { label: 'AWS',   bg: '#FF9900', text: '#000716' },
-  gcp:   { label: 'GCP',   bg: '#1A73E8', text: '#FFFFFF' },
-  azure: { label: 'Azure', bg: '#0078D4', text: '#FFFFFF' },
-};
-const badge = csp ? cspBadge[csp] : null;
+// GCP 4-color rotation
+const gcpColors = ['#4285F4', '#EA4335', '#FBBC04', '#34A853'];
+const gcpAccent = gcpColors[index % 4];
+
 const hasDetails = !!(target || features || regions);
 ---
 
-<div class="card-wrapper group" style={`background:var(--color-surface);border-radius:var(--radius);box-shadow:var(--card-shadow);border:var(--card-border);overflow:hidden;transition:all 0.2s;`}>
-  <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer" class="block no-underline p-4 sm:p-5">
-    <div class="flex items-center gap-1.5 mb-2.5 flex-wrap">
-      {badge && (
-        <span class="px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-bold leading-none" style={`background:${badge.bg};color:${badge.text};`}>
-          {badge.label}
-        </span>
-      )}
-      {statuses.map(s => (
-        <span class="px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-medium leading-none" style={statusColors[s] || `background:color-mix(in srgb,var(--color-primary) 15%,transparent);color:var(--color-primary);`}>
-          {s}
-        </span>
-      ))}
-      {date && <time class="text-[11px] sm:text-xs ml-auto shrink-0" style="color:var(--color-text-secondary);">{date}</time>}
-    </div>
-
-    <h3 class="text-sm sm:text-base font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">
-      {title}
-    </h3>
-
-    <p class="text-xs sm:text-sm leading-relaxed" style="color:var(--color-text-secondary);">
-      {content}
-    </p>
-  </a>
-
-  {hasDetails && (
-    <div class="details-section" style="border-top:1px solid var(--color-border);">
-      <!-- Mobile: always visible, toggle with tap -->
-      <button class="details-toggle w-full px-4 sm:px-5 py-2 text-left text-xs font-medium sm:hidden" style="color:var(--color-primary);background:transparent;border:none;cursor:pointer;">
-        상세 정보 ▾
-      </button>
-      <div class="details-content px-4 sm:px-5 pb-3 pt-1 space-y-1 text-[11px] sm:text-xs hidden sm:hidden group-hover:sm:block">
-        {target && <div><span class="font-semibold" style="color:var(--color-primary);">대상</span> <span style="color:var(--color-text-secondary);">{target}</span></div>}
-        {features && <div><span class="font-semibold" style="color:var(--color-primary);">기능</span> <span style="color:var(--color-text-secondary);">{features}</span></div>}
-        {regions && <div><span class="font-semibold" style="color:var(--color-primary);">리전</span> <span style="color:var(--color-text-secondary);">{regions}</span></div>}
+{csp === 'aws' ? (
+  <!-- AWS Cloudscape: bordered, dense, orange accent -->
+  <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
+    class="aws-card block no-underline overflow-hidden transition-all duration-200"
+    style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px; border-left:4px solid #FF9900;">
+    <div class="p-4 sm:p-5">
+      <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+        {statuses.map(s => <span class="px-1.5 py-0.5 rounded text-[11px] font-medium" style={statusColors[s] || ''}>{s}</span>)}
+        {date && <time class="text-[11px] ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>
+      <h3 class="text-sm sm:text-base font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
+      <p class="text-xs sm:text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      {hasDetails && (
+        <div class="mt-3 pt-2 space-y-1 text-[11px]" style="border-top:1px solid var(--color-border);">
+          {target && <div><span class="font-semibold" style="color:#0972D3;">대상</span> <span style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-semibold" style="color:#0972D3;">기능</span> <span style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-semibold" style="color:#0972D3;">리전</span> <span style="color:var(--color-text-secondary);">{regions}</span></div>}
+        </div>
+      )}
     </div>
-  )}
-</div>
+  </a>
+) : csp === 'gcp' ? (
+  <!-- GCP Material: rounded, floating, 4-color accent rotation -->
+  <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
+    class="gcp-card block no-underline overflow-hidden transition-all duration-200"
+    style={`background:var(--color-surface); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent};`}>
+    <div class="p-4 sm:p-5">
+      <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+        {statuses.map(s => <span class="px-2 py-0.5 rounded-full text-[11px] font-medium" style={statusColors[s] || ''}>{s}</span>)}
+        {date && <time class="text-[11px] ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+      </div>
+      <h3 class="text-sm sm:text-base font-medium mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
+      <p class="text-xs sm:text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      {hasDetails && (
+        <div class="mt-3 pt-2 space-y-1 text-[11px]" style={`border-top:2px solid ${gcpAccent}20;`}>
+          {target && <div><span class="font-medium" style={`color:${gcpAccent};`}>대상</span> <span style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-medium" style={`color:${gcpAccent};`}>기능</span> <span style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-medium" style={`color:${gcpAccent};`}>리전</span> <span style="color:var(--color-text-secondary);">{regions}</span></div>}
+        </div>
+      )}
+    </div>
+  </a>
+) : (
+  <!-- Azure Fluent: spacious, subtle, clean -->
+  <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
+    class="azure-card block no-underline overflow-hidden transition-all duration-200"
+    style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
+    <div class="p-5 sm:p-6">
+      <div class="flex items-center gap-1.5 mb-3 flex-wrap">
+        {statuses.map(s => <span class="px-2 py-0.5 rounded text-[11px] font-semibold" style={statusColors[s] || ''}>{s}</span>)}
+        {date && <time class="text-[11px] ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+      </div>
+      <h3 class="text-sm sm:text-base font-semibold mb-3 leading-relaxed" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
+      <p class="text-xs sm:text-sm leading-loose line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      {hasDetails && (
+        <div class="mt-4 pt-3 space-y-2 text-xs" style="border-top:1px solid var(--color-border);">
+          {target && <div><span class="font-semibold" style="color:#0078D4;">대상</span> <span class="ml-2" style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-semibold" style="color:#0078D4;">기능</span> <span class="ml-2" style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-semibold" style="color:#0078D4;">리전</span> <span class="ml-2" style="color:var(--color-text-secondary);">{regions}</span></div>}
+        </div>
+      )}
+    </div>
+  </a>
+)}
 
 <style>
-  .card-wrapper:hover {
-    box-shadow: var(--card-hover-shadow) !important;
-    border: var(--card-hover-border) !important;
-    transform: translateY(-2px);
-  }
-  @media (min-width: 640px) {
-    .details-toggle { display: none !important; }
-    .details-content { display: none !important; }
-    .card-wrapper:hover .details-content { display: block !important; }
-  }
+  .aws-card:hover { border-color: #879596 !important; background: #FAFAFA !important; }
+  .gcp-card:hover { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); }
+  .azure-card:hover { border-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
 </style>
-
-<script>
-  document.querySelectorAll('.details-toggle').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const content = btn.nextElementSibling as HTMLElement;
-      const isOpen = !content.classList.contains('hidden');
-      content.classList.toggle('hidden');
-      btn.textContent = isOpen ? '상세 정보 ▾' : '상세 정보 ▴';
-    });
-  });
-</script>
