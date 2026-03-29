@@ -115,3 +115,15 @@ body {
 [data-vendor="aws"] header {
   border-bottom: none !important;
 }
+
+/* Accessibility: focus-visible */
+a:focus-visible, button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Card press feedback */
+.aws-card:active, .gcp-card:active, .azure-card:active {
+  transform: scale(0.98) !important;
+}
