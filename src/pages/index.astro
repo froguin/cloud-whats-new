@@ -10,12 +10,17 @@ const csps = [
 ];
 
 const data: Record<string, any[]> = {};
+let latestDate = '';
 for (const c of csps) {
   try {
     const res = await fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=8`);
     data[c.id] = (await res.json()).items || [];
+    for (const a of data[c.id]) {
+      if (a.pub_date && a.pub_date > latestDate) latestDate = a.pub_date;
+    }
   } catch { data[c.id] = []; }
 }
+const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 ---
 
 <Layout title="What's New — 클라우드 최신 업데이트" vendor="home">
@@ -30,6 +35,11 @@ for (const c of csps) {
     <p class="text-sm sm:text-base" style="color: var(--color-primary); font-family: 'Pretendard Variable', var(--font-family);">
       클라우드 최신 업데이트
     </p>
+    {lastUpdated && (
+      <p class="text-xs mt-2" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
+        마지막 업데이트: {lastUpdated}
+      </p>
+    )}
   </div>
 
   <!-- 3-column layout -->
