@@ -25,7 +25,7 @@ try {
       style="border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary);" />
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cards">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start" id="cards">
     {articles.map(a => (
       <UpdateCardCloudscape
         title={a.title} csp={a.csp}

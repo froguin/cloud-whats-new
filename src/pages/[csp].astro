@@ -7,7 +7,7 @@ const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
 const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
-const names: Record<string, string> = { aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
+const names: Record<string, string> = { aws: 'Amazon Web Services', gcp: 'Google Cloud Platform', azure: 'Microsoft Azure' };
 
 let articles: any[] = [];
 try {
@@ -30,7 +30,7 @@ try {
       style="border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary);" />
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="cards">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start" id="cards">
     {articles.map(a => (
       <UpdateCardCloudscape
         title={a.title} csp={a.csp}

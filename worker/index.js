@@ -13,8 +13,7 @@ RULES:
 - Output ONLY valid JSON, no markdown, no explanation
 
 OUTPUT FORMAT:
-{"title":"Korean title (product names stay English). For GCP date-based entries, create a descriptive title listing the main products updated (e.g. 'Cloud Composer, Compute Engine, Document AI 업데이트')","summary":"3-4 sentence Korean summary","target":"이 업데이트가 도움이 되는 대상을 한국어 문장으로 설명 (예: 서버리스 애플리케이션을 운영하는 백엔드 개발자)","features":"key features in Korean, comma separated","regions":"원문에 리전이 명시되어 있으면 그대로 나열 (예: us-east-1, ap-northeast-2). 명시되지 않았으면 모든 리전","status":["해당하는 상태를 배열로 반환. 여러 제품이 포함된 경우 각각의 상태를 모두 포함. 가능한 값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
-
+{"title":"Korean title (product names stay English). For GCP date-based entries, format as 'YYYY년 M월 D일: 제품1, 제품2 업데이트' (colon after date is mandatory)","summary":"3-4 sentence Korean summary","target":"이 업데이트가 도움이 되는 대상을 한국어 문장으로 설명","features":"key features in Korean, comma separated","regions":"원문에 리전이 명시되어 있으면 그대로 나열. 명시되지 않았으면 모든 리전","status":["ONLY pure status values, NEVER include product names. Valid: 정식 출시, 미리보기, 베타, 지원 종료. WRONG: Cloud Run: 미리보기. RIGHT: 미리보기"]}`;
 const FEW_SHOT = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
   { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"AWS Lambda가 Python 3.13 런타임을 공식 지원합니다. 개선된 오류 메시지, 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 Lambda 함수에서 활용할 수 있습니다. Lambda가 제공되는 모든 AWS 리전에서 즉시 사용 가능합니다.","target":"서버리스 애플리케이션을 Python으로 개발하는 백엔드 개발자","features":"Python 3.13 런타임, 개선된 오류 메시지, 새로운 REPL, 성능 향상","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
