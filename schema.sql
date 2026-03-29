@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS articles (
   description_en TEXT,
   pub_date TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(csp, url)
+  UNIQUE(csp, url, title_en)
 );
 
 -- Denormalized read table: all languages including English

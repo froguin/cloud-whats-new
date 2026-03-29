@@ -83,15 +83,13 @@ async function fetchRSS(env) {
         const r = await env.DB.prepare(
           'INSERT OR IGNORE INTO articles (csp, url, title_en, description_en, pub_date) VALUES (?,?,?,?,?)'
         ).bind(csp, item.url || '', item.title, item.description, item.pub_date).run();
-        if (r.meta.changes > 0) {
-          // Also insert English as lang='en' into localized_content
-          const row = await env.DB.prepare('SELECT id FROM articles WHERE csp=? AND url=?').bind(csp, item.url || '').first();
-          if (row) {
-            await env.DB.prepare(
-              'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
-            ).bind(row.id, csp, 'en', item.url || '', item.pub_date, item.title, item.description, '').run();
-          }
-          totalNew++;
+        if (r.meta.changes > 0) totalNew++;
+        // Always ensure English localized_content exists
+        const row = await env.DB.prepare('SELECT id FROM articles WHERE csp=? AND url=? AND title_en=?').bind(csp, item.url || '', item.title).first();
+        if (row) {
+          await env.DB.prepare(
+            'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
+          ).bind(row.id, csp, 'en', item.url || '', item.pub_date, item.title, item.description, '').run();
         }
       }
     } catch (e) {
