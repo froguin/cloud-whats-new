@@ -119,7 +119,11 @@ async function translateNew(env, lang = 'ko', limit = 10) {
   let translated = 0;
   for (const row of rows.results) {
     try {
-      const userMsg = `Title: ${row.title_en}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
+      // If title is just a product name, prepend description hint
+      const titleForLLM = row.title_en.length < 20
+        ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
+        : row.title_en;
+      const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
       const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
         messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
         max_tokens: 768, temperature: 0.1,
