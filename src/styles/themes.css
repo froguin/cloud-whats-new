@@ -1,6 +1,6 @@
-/* === Vendor Themes — based on each CSP's design system === */
+/* === Vendor Themes — each CSP's design system === */
 
-/* Home — vendor-neutral */
+/* Home — vendor-neutral indigo */
 [data-vendor="home"] {
   --color-primary: #4F6CF7;
   --color-accent: #9B59F5;
@@ -9,6 +9,8 @@
   --color-border: #E4E7EC;
   --color-text-primary: #101828;
   --color-text-secondary: #667085;
+  --font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius: 12px;
 }
 [data-vendor="home"][data-theme="dark"] {
   --color-primary: #7B93FF;
@@ -20,15 +22,17 @@
   --color-text-secondary: #8B8FA8;
 }
 
-/* AWS Cloudscape */
+/* AWS Cloudscape — squared, orange accent, dark navy */
 [data-vendor="aws"] {
   --color-primary: #0972D3;
   --color-accent: #FF9900;
-  --color-bg: #FFFFFF;
-  --color-surface: #F2F3F3;
+  --color-bg: #F2F3F3;
+  --color-surface: #FFFFFF;
   --color-border: #C6C6CD;
   --color-text-primary: #000716;
   --color-text-secondary: #5F6B7A;
+  --font-family: 'Amazon Ember', 'Noto Sans KR', -apple-system, sans-serif;
+  --radius: 8px;
 }
 [data-vendor="aws"][data-theme="dark"] {
   --color-primary: #539FE5;
@@ -36,19 +40,21 @@
   --color-bg: #0F1B2D;
   --color-surface: #192534;
   --color-border: #354150;
-  --color-text-primary: #FFFFFF;
+  --color-text-primary: #D1D5DB;
   --color-text-secondary: #8D99A5;
 }
 
-/* GCP Material / Google Cloud */
+/* GCP Material — rounded, green accent, clean white */
 [data-vendor="gcp"] {
   --color-primary: #1A73E8;
   --color-accent: #34A853;
-  --color-bg: #FFFFFF;
-  --color-surface: #F8F9FA;
+  --color-bg: #F8F9FA;
+  --color-surface: #FFFFFF;
   --color-border: #DADCE0;
   --color-text-primary: #202124;
   --color-text-secondary: #5F6368;
+  --font-family: 'Google Sans', 'Noto Sans KR', -apple-system, sans-serif;
+  --radius: 16px;
 }
 [data-vendor="gcp"][data-theme="dark"] {
   --color-primary: #8AB4F8;
@@ -60,7 +66,7 @@
   --color-text-secondary: #9AA0A6;
 }
 
-/* Azure Fluent UI */
+/* Azure Fluent — subtle shadow, blue gradient feel */
 [data-vendor="azure"] {
   --color-primary: #0078D4;
   --color-accent: #0F6CBD;
@@ -69,20 +75,22 @@
   --color-border: #EDEBE9;
   --color-text-primary: #242424;
   --color-text-secondary: #616161;
+  --font-family: 'Segoe UI', 'Noto Sans KR', -apple-system, sans-serif;
+  --radius: 4px;
 }
 [data-vendor="azure"][data-theme="dark"] {
   --color-primary: #479EF5;
   --color-accent: #2886DE;
-  --color-bg: #1C1C1C;
-  --color-surface: #242424;
-  --color-border: #3D3D3D;
-  --color-text-primary: #F7F7F7;
-  --color-text-secondary: #ADADAD;
+  --color-bg: #1B1A19;
+  --color-surface: #292827;
+  --color-border: #3B3A39;
+  --color-text-primary: #F3F2F1;
+  --color-text-secondary: #A19F9D;
 }
 
-/* === Base styles using CSS variables === */
+/* === Base === */
 body {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
-  font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-family);
 }

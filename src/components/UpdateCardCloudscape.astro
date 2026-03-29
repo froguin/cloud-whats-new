@@ -11,7 +11,23 @@ interface Props {
   originalLink?: string;
 }
 
-const { title, date, content, csp, target, features, regions, status = '정식 출시', originalLink } = Astro.props;
+const { title, date, content, csp, target, features, regions, status, originalLink } = Astro.props;
+
+// Parse status: could be JSON array string, comma string, or single value
+let statuses: string[] = [];
+try {
+  if (status) {
+    const parsed = JSON.parse(status);
+    statuses = Array.isArray(parsed) ? parsed : [status];
+  }
+} catch { statuses = status ? [status] : []; }
+
+const statusColors: Record<string, string> = {
+  '정식 출시': 'background-color: color-mix(in srgb, #0e8a16 20%, transparent); color: #0e8a16;',
+  '미리보기': 'background-color: color-mix(in srgb, #1a73e8 20%, transparent); color: #1a73e8;',
+  '베타': 'background-color: color-mix(in srgb, #9333ea 20%, transparent); color: #9333ea;',
+  '지원 종료': 'background-color: color-mix(in srgb, #d93f0b 20%, transparent); color: #d93f0b;',
+};
 
 const cspBadge: Record<string, { label: string; bg: string; text: string }> = {
   aws:   { label: 'AWS',   bg: '#FF9900', text: '#000716' },
@@ -21,64 +37,57 @@ const cspBadge: Record<string, { label: string; bg: string; text: string }> = {
 const badge = csp ? cspBadge[csp] : null;
 ---
 
-<article class="group rounded-lg overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
-  style="background-color: var(--color-surface); border: 1px solid var(--color-border);">
+<a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
+  class="block group rounded-lg overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 no-underline"
+  style={`background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius);`}>
   <div class="p-5">
-    <div class="flex items-center gap-2 mb-2">
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
       {badge && (
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold"
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold shrink-0"
           style={`background-color: ${badge.bg}; color: ${badge.text};`}>
           {badge.label}
         </span>
       )}
-      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-        style={`background-color: color-mix(in srgb, var(--color-primary) 15%, transparent); color: var(--color-primary);`}>
-        {status}
-      </span>
-      <time class="text-xs" style="color: var(--color-text-secondary);">{date}</time>
+      {statuses.map(s => (
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0"
+          style={statusColors[s] || `background-color: color-mix(in srgb, var(--color-primary) 15%, transparent); color: var(--color-primary);`}>
+          {s}
+        </span>
+      ))}
+      {date && <time class="text-xs shrink-0" style="color: var(--color-text-secondary);">{date}</time>}
     </div>
 
-    <h3 class="text-base font-bold mb-2 line-clamp-2 leading-snug" style="color: var(--color-text-primary);">
+    <h3 class="text-base font-bold mb-3 leading-snug break-words" style="color: var(--color-text-primary); word-break: break-word; overflow-wrap: anywhere;">
       {title}
     </h3>
 
-    <p class="text-sm mb-4 line-clamp-3 group-hover:line-clamp-none leading-relaxed transition-all duration-200"
+    <p class="text-sm mb-4 leading-relaxed line-clamp-4"
       style="color: var(--color-text-secondary);">
       {content}
     </p>
 
-    <div class="space-y-2 pt-3" style="border-top: 1px solid var(--color-border);">
-      {target && (
-        <div class="flex items-start gap-2">
-          <span class="text-xs font-medium" style="color: var(--color-primary);">대상</span>
-          <span class="text-xs" style="color: var(--color-text-secondary);">{target}</span>
-        </div>
-      )}
-      {features && (
-        <div class="flex items-start gap-2">
-          <span class="text-xs font-medium" style="color: var(--color-primary);">기능</span>
-          <span class="text-xs" style="color: var(--color-text-secondary);">{features}</span>
-        </div>
-      )}
-      {regions && (
-        <div class="flex items-start gap-2">
-          <span class="text-xs font-medium" style="color: var(--color-primary);">리전</span>
-          <span class="text-xs" style="color: var(--color-text-secondary);">{regions}</span>
-        </div>
-      )}
-    </div>
+    {(target || features || regions) && (
+      <div class="space-y-1.5 pt-3 text-xs" style="border-top: 1px solid var(--color-border);">
+        {target && (
+          <div><span class="font-medium" style="color: var(--color-primary);">대상</span> <span style="color: var(--color-text-secondary);">{target}</span></div>
+        )}
+        {features && (
+          <div><span class="font-medium" style="color: var(--color-primary);">기능</span> <span style="color: var(--color-text-secondary);">{features}</span></div>
+        )}
+        {regions && (
+          <div><span class="font-medium" style="color: var(--color-primary);">리전</span> <span style="color: var(--color-text-secondary);">{regions}</span></div>
+        )}
+      </div>
+    )}
   </div>
 
-  {originalLink && (
-    <div class="px-5 py-3 transition-colors" style="border-top: 1px solid var(--color-border);">
-      <a href={originalLink} target="_blank" rel="noopener noreferrer"
-        class="inline-flex items-center gap-1 text-sm font-medium hover:underline"
-        style="color: var(--color-primary);">
-        자세히 보기
-        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </a>
-    </div>
-  )}
-</article>
+  <div class="px-5 py-3 transition-colors group-hover:opacity-80"
+    style="border-top: 1px solid var(--color-border); background-color: color-mix(in srgb, var(--color-primary) 5%, transparent);">
+    <span class="inline-flex items-center gap-1 text-sm font-medium" style="color: var(--color-primary);">
+      자세히 보기
+      <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+        <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+  </div>
+</a>

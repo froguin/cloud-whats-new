@@ -31,15 +31,19 @@ const cspNames: Record<string, string> = { home: 'Cloud What\'s New', aws: 'AWS'
         </a>
 
         <nav class="flex items-center gap-1">
-          {['aws', 'gcp', 'azure'].map(csp => (
-            <a href={`/${csp}`}
-               class="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
-               style={vendor === csp
-                 ? `background-color: var(--color-primary); color: white;`
-                 : `color: var(--color-text-secondary);`}>
-              {cspNames[csp]}
-            </a>
-          ))}
+          {['aws', 'gcp', 'azure'].map(c => {
+            const colors: Record<string, string> = { aws: '#FF9900', gcp: '#34A853', azure: '#0078D4' };
+            const isActive = vendor === c;
+            return (
+              <a href={`/${c}`}
+                class="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+                style={isActive
+                  ? `background-color: ${colors[c]}; color: white;`
+                  : `color: var(--color-text-secondary); border: 1px solid var(--color-border);`}>
+                {cspNames[c]}
+              </a>
+            );
+          })}
           <button id="theme-toggle" class="ml-3 p-2 rounded-lg transition-colors" style="color: var(--color-text-secondary);">
             <svg id="icon-dark" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
               <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>

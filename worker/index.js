@@ -13,15 +13,15 @@ RULES:
 - Output ONLY valid JSON, no markdown, no explanation
 
 OUTPUT FORMAT:
-{"title":"Korean title (product names stay English)","summary":"3-4 sentence Korean summary","target":"이 업데이트가 도움이 되는 대상을 한국어 문장으로 설명 (예: 서버리스 애플리케이션을 운영하는 백엔드 개발자)","features":"key features in Korean, comma separated","regions":"원문에 리전이 명시되어 있으면 그대로 나열 (예: us-east-1, ap-northeast-2). 명시되지 않았으면 모든 리전","status":"정식 출시|미리보기|베타|지원 종료"}`;
+{"title":"Korean title (product names stay English). For GCP date-based entries, create a descriptive title listing the main products updated (e.g. 'Cloud Composer, Compute Engine, Document AI 업데이트')","summary":"3-4 sentence Korean summary","target":"이 업데이트가 도움이 되는 대상을 한국어 문장으로 설명 (예: 서버리스 애플리케이션을 운영하는 백엔드 개발자)","features":"key features in Korean, comma separated","regions":"원문에 리전이 명시되어 있으면 그대로 나열 (예: us-east-1, ap-northeast-2). 명시되지 않았으면 모든 리전","status":["해당하는 상태를 배열로 반환. 여러 제품이 포함된 경우 각각의 상태를 모두 포함. 가능한 값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
 
 const FEW_SHOT = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
-  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"AWS Lambda가 Python 3.13 런타임을 공식 지원합니다. 개선된 오류 메시지, 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 Lambda 함수에서 활용할 수 있습니다. Lambda가 제공되는 모든 AWS 리전에서 즉시 사용 가능합니다.","target":"서버리스 애플리케이션을 Python으로 개발하는 백엔드 개발자","features":"Python 3.13 런타임, 개선된 오류 메시지, 새로운 REPL, 성능 향상","regions":"Lambda가 제공되는 모든 AWS 리전","status":"정식 출시"}' },
+  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"AWS Lambda가 Python 3.13 런타임을 공식 지원합니다. 개선된 오류 메시지, 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 Lambda 함수에서 활용할 수 있습니다. Lambda가 제공되는 모든 AWS 리전에서 즉시 사용 가능합니다.","target":"서버리스 애플리케이션을 Python으로 개발하는 백엔드 개발자","features":"Python 3.13 런타임, 개선된 오류 메시지, 새로운 REPL, 성능 향상","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: Cloud Run now supports GPU acceleration (Preview)\nDescription: You can now attach NVIDIA L4 GPUs to your Cloud Run services for AI/ML inference workloads. GPU-enabled services are available in us-central1 and europe-west4.' },
-  { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"Cloud Run 서비스에 NVIDIA L4 GPU를 연결하여 AI/ML 추론 워크로드를 실행할 수 있습니다. GPU 지원을 통해 Cloud Run에서 직접 머신러닝 모델을 서빙할 수 있게 되었습니다. 현재 us-central1과 europe-west4 리전에서 Preview로 제공됩니다.","target":"Cloud Run에서 AI/ML 추론 워크로드를 실행하려는 ML 엔지니어 및 백엔드 개발자","features":"NVIDIA L4 GPU 연결, AI/ML 추론 워크로드 지원","regions":"us-central1, europe-west4","status":"미리보기"}' },
+  { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"Cloud Run 서비스에 NVIDIA L4 GPU를 연결하여 AI/ML 추론 워크로드를 실행할 수 있습니다. GPU 지원을 통해 Cloud Run에서 직접 머신러닝 모델을 서빙할 수 있게 되었습니다. 현재 us-central1과 europe-west4 리전에서 Preview로 제공됩니다.","target":"Cloud Run에서 AI/ML 추론 워크로드를 실행하려는 ML 엔지니어 및 백엔드 개발자","features":"NVIDIA L4 GPU 연결, AI/ML 추론 워크로드 지원","regions":"us-central1, europe-west4","status":["미리보기"]}' },
   { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions. Generally available.' },
-  { role: 'assistant', content: '{"title":"Azure Kubernetes Service (AKS)에서 Kubernetes 1.31 지원","summary":"Azure Kubernetes Service (AKS)가 Kubernetes 1.31을 정식 지원합니다. 사이드카 컨테이너 지원 개선, 향상된 Pod 라이프사이클 관리, 새로운 스케줄링 기능이 포함되었습니다. 모든 Azure 퍼블릭 리전에서 정식 제공됩니다.","target":"AKS에서 컨테이너 워크로드를 운영하는 DevOps 엔지니어 및 플랫폼 팀","features":"Kubernetes 1.31, 사이드카 컨테이너 개선, Pod 라이프사이클 관리, 스케줄링 기능","regions":"모든 Azure 퍼블릭 리전","status":"정식 출시"}' },
+  { role: 'assistant', content: '{"title":"Azure Kubernetes Service (AKS)에서 Kubernetes 1.31 지원","summary":"Azure Kubernetes Service (AKS)가 Kubernetes 1.31을 정식 지원합니다. 사이드카 컨테이너 지원 개선, 향상된 Pod 라이프사이클 관리, 새로운 스케줄링 기능이 포함되었습니다. 모든 Azure 퍼블릭 리전에서 정식 제공됩니다.","target":"AKS에서 컨테이너 워크로드를 운영하는 DevOps 엔지니어 및 플랫폼 팀","features":"Kubernetes 1.31, 사이드카 컨테이너 개선, Pod 라이프사이클 관리, 스케줄링 기능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
 function parseRSS(xml, csp) {
@@ -39,13 +39,29 @@ function parseRSS(xml, csp) {
     const url = isAtom
       ? ((block.match(/<link[^>]*href="([^"]*)"/) || [])[1] || '')
       : (get('link') || get('guid'));
-    items.push({
-      csp,
-      title: get('title').replace(/<[^>]+>/g, ''),
-      description: (isAtom ? get('content') : get('description')).replace(/<[^>]+>/g, '').slice(0, 2000),
-      url,
-      pub_date: get('pubDate') || get('updated') || get('published') || '',
-    });
+    const pubDate = get('pubDate') || get('updated') || get('published') || '';
+    const rawContent = isAtom ? get('content') : get('description');
+    const rawTitle = get('title').replace(/<[^>]+>/g, '');
+
+    // GCP: split by product title (<h2 class="release-note-product-title">)
+    if (csp === 'gcp' && rawContent.includes('release-note-product-title')) {
+      const sections = rawContent.split(/<h2[^>]*class="release-note-product-title"[^>]*>/);
+      for (let i = 1; i < sections.length; i++) {
+        const endH2 = sections[i].indexOf('</h2>');
+        if (endH2 < 0) continue;
+        const productName = sections[i].slice(0, endH2).replace(/<[^>]+>/g, '').trim();
+        const body = sections[i].slice(endH2 + 5).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
+        items.push({ csp, title: productName, description: body, url, pub_date: pubDate });
+      }
+    } else {
+      items.push({
+        csp,
+        title: rawTitle,
+        description: rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+        url,
+        pub_date: pubDate,
+      });
+    }
   }
   return items;
 }
@@ -112,10 +128,11 @@ async function translateNew(env, lang = 'ko', limit = 10) {
       if (!parsed || !parsed.title) continue;
       const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
       const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
+      const stat = Array.isArray(parsed.status) ? JSON.stringify(parsed.status) : JSON.stringify([parsed.status || '정식 출시']);
       await env.DB.prepare(
         'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
       ).bind(row.id, row.csp, lang, row.url, row.pub_date, parsed.title, parsed.summary || '',
-             parsed.target || 'all', feat, reg, parsed.status || '', 'cf-llama-3.1-8b').run();
+             parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
       translated++;
     } catch (e) {
       console.error(`translate error for article ${row.id}:`, e.message);
