@@ -26,6 +26,10 @@ const FEW_SHOT = [
   { role: 'assistant', content: '{"title":"Azure Kubernetes Service (AKS)에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
+function decodeEntities(s) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+
 function parseRSS(xml, csp) {
   const items = [];
   const isAtom = !xml.includes('<item>') && xml.includes('<entry>');
@@ -44,7 +48,7 @@ function parseRSS(xml, csp) {
     const rawDate = get('pubDate') || get('updated') || get('published') || '';
     const pubDate = rawDate ? new Date(rawDate).toISOString() : '';
     const rawContent = isAtom ? get('content') : get('description');
-    const rawTitle = get('title').replace(/<[^>]+>/g, '');
+    const rawTitle = decodeEntities(get('title').replace(/<[^>]+>/g, ''));
 
     // GCP: split by product title (<h2 class="release-note-product-title">)
     if (csp === 'gcp' && rawContent.includes('release-note-product-title')) {
@@ -52,7 +56,7 @@ function parseRSS(xml, csp) {
       for (let i = 1; i < sections.length; i++) {
         const endH2 = sections[i].indexOf('</h2>');
         if (endH2 < 0) continue;
-        const productName = sections[i].slice(0, endH2).replace(/<[^>]+>/g, '').trim();
+        const productName = decodeEntities(sections[i].slice(0, endH2).replace(/<[^>]+>/g, '').trim());
         const body = sections[i].slice(endH2 + 5).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
         items.push({ csp, title: productName, description: body, url, pub_date: pubDate });
       }
