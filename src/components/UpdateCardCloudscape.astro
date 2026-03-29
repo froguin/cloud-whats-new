@@ -37,7 +37,7 @@ const badge = csp ? cspBadge[csp] : null;
 const hasDetails = !!(target || features || regions);
 ---
 
-<div class="card-wrapper group" style={`background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);box-shadow:var(--card-shadow);overflow:hidden;transition:all 0.2s;`}>
+<div class="card-wrapper group" style={`background:var(--color-surface);border-radius:var(--radius);box-shadow:var(--card-shadow);border:var(--card-border);overflow:hidden;transition:all 0.2s;`}>
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer" class="block no-underline p-4 sm:p-5">
     <div class="flex items-center gap-1.5 mb-2.5 flex-wrap">
       {badge && (
@@ -80,12 +80,16 @@ const hasDetails = !!(target || features || regions);
 <style>
   .card-wrapper:hover {
     box-shadow: var(--card-hover-shadow) !important;
+    border: var(--card-hover-border) !important;
     transform: translateY(-2px);
   }
   @media (min-width: 640px) {
     .details-toggle { display: none !important; }
     .details-content { display: none !important; }
-    .card-wrapper:hover .details-content { display: block !important; }
+  .card-wrapper:hover {
+    box-shadow: var(--card-hover-shadow) !important;
+    border: var(--card-hover-border) !important;
+    transform: translateY(-2px);
   }
 </style>
 

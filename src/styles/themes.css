@@ -1,71 +1,109 @@
-/* Home — neutral indigo */
+/* ============================================
+   Home — neutral, hub feel
+   ============================================ */
 [data-vendor="home"] {
   --color-primary: #4F6CF7; --color-accent: #9B59F5;
   --color-bg: #F9FAFB; --color-surface: #FFFFFF; --color-border: #E4E7EC;
   --color-text-primary: #101828; --color-text-secondary: #667085;
   --font-family: 'Noto Sans KR', -apple-system, sans-serif;
+  --font-weight-title: 700;
   --radius: 12px; --nav-bg: #101828; --nav-height: 56px;
-  --card-shadow: 0 1px 3px rgba(0,0,0,0.1); --card-hover-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.08); --card-hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  --card-border: 1px solid #E4E7EC;
+  --card-hover-border: 1px solid #D0D5DD;
 }
 [data-vendor="home"][data-theme="dark"] {
   --color-primary: #7B93FF; --color-accent: #BB86FC;
   --color-bg: #0F1117; --color-surface: #1A1D27; --color-border: #2D3148;
   --color-text-primary: #F4F4F6; --color-text-secondary: #8B8FA8;
-  --nav-bg: #0F1117;
+  --nav-bg: #0F1117; --card-border: 1px solid #2D3148; --card-hover-border: 1px solid #4B5078;
 }
 
-/* AWS Cloudscape — dark squid ink nav, sharp borders, dense */
+/* ============================================
+   AWS Cloudscape — operational, dense, bordered
+   Dark squid ink nav, orange accent, NO shadow on cards
+   ============================================ */
 [data-vendor="aws"] {
   --color-primary: #0972D3; --color-accent: #FF9900;
   --color-bg: #F2F3F3; --color-surface: #FFFFFF; --color-border: #D5DBDB;
   --color-text-primary: #000716; --color-text-secondary: #5F6B7A;
   --font-family: 'Open Sans', 'Noto Sans KR', sans-serif;
+  --font-weight-title: 700;
   --radius: 8px; --nav-bg: #232F3E; --nav-height: 56px;
-  --card-shadow: none; --card-hover-shadow: 0 1px 2px rgba(0,28,36,0.06);
+  --card-shadow: none; --card-hover-shadow: none;
+  --card-border: 2px solid #D5DBDB;
+  --card-hover-border: 2px solid #879596;
 }
 [data-vendor="aws"][data-theme="dark"] {
   --color-primary: #539FE5; --color-accent: #FF9900;
   --color-bg: #0F1B2D; --color-surface: #192534; --color-border: #354150;
   --color-text-primary: #D1D5DB; --color-text-secondary: #8D99A5;
-  --nav-bg: #161E2D;
+  --nav-bg: #161E2D; --card-border: 2px solid #354150; --card-hover-border: 2px solid #539FE5;
 }
 
-/* GCP Material 3 — white nav, rounded, floating cards */
+/* ============================================
+   GCP Material 3 — airy, rounded, floating shadows
+   White nav, NO visible border on cards, shadow-based depth
+   ============================================ */
 [data-vendor="gcp"] {
   --color-primary: #1A73E8; --color-accent: #34A853;
-  --color-bg: #F8F9FA; --color-surface: #FFFFFF; --color-border: #E0E3E7;
+  --color-bg: #F8F9FA; --color-surface: #FFFFFF; --color-border: transparent;
   --color-text-primary: #202124; --color-text-secondary: #5F6368;
   --font-family: 'Roboto Flex', 'Noto Sans KR', sans-serif;
+  --font-weight-title: 500;
   --radius: 12px; --nav-bg: #FFFFFF; --nav-height: 64px;
   --card-shadow: 0 1px 2px rgba(60,64,67,0.15), 0 1px 3px 1px rgba(60,64,67,0.08);
   --card-hover-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30);
+  --card-border: none;
+  --card-hover-border: none;
 }
 [data-vendor="gcp"][data-theme="dark"] {
   --color-primary: #8AB4F8; --color-accent: #81C995;
-  --color-bg: #202124; --color-surface: #292A2D; --color-border: #3C4043;
+  --color-bg: #202124; --color-surface: #292A2D; --color-border: transparent;
   --color-text-primary: #E8EAED; --color-text-secondary: #9AA0A6;
   --nav-bg: #292A2D;
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.4); --card-hover-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  --card-border: none; --card-hover-border: none;
 }
 
-/* Azure Fluent UI 2 — compact, subtle depth, productivity feel */
+/* ============================================
+   Azure Fluent UI 2 — compact, subtle depth, productivity
+   White nav with blue accent line, tight radius, shadow-based
+   ============================================ */
 [data-vendor="azure"] {
   --color-primary: #0078D4; --color-accent: #0F6CBD;
   --color-bg: #FAF9F8; --color-surface: #FFFFFF; --color-border: #EDEBE9;
   --color-text-primary: #242424; --color-text-secondary: #616161;
   --font-family: 'Inter', 'Noto Sans KR', -apple-system, sans-serif;
+  --font-weight-title: 600;
   --radius: 4px; --nav-bg: #FFFFFF; --nav-height: 48px;
   --card-shadow: 0 0 2px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.14);
   --card-hover-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14);
+  --card-border: 1px solid #EDEBE9;
+  --card-hover-border: 1px solid #0078D4;
 }
 [data-vendor="azure"][data-theme="dark"] {
   --color-primary: #479EF5; --color-accent: #2886DE;
   --color-bg: #1B1A19; --color-surface: #292827; --color-border: #3B3A39;
   --color-text-primary: #F3F2F1; --color-text-secondary: #A19F9D;
   --nav-bg: #292827;
+  --card-border: 1px solid #3B3A39; --card-hover-border: 1px solid #479EF5;
 }
 
 body {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family);
+}
+
+/* Nav accent details */
+[data-vendor="azure"] header {
+  border-top: 3px solid #0078D4 !important;
+}
+[data-vendor="gcp"] header {
+  border-bottom: 1px solid #DADCE0 !important;
+  box-shadow: none !important;
+}
+[data-vendor="aws"] header {
+  border-bottom: none !important;
 }
