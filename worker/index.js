@@ -11,6 +11,8 @@ RULES:
 - Keep region codes in English (us-east-1, ap-northeast-2, etc.)
 - Write like a Korean tech blog, NOT machine translation
 - Output ONLY valid JSON, no markdown
+- NEVER change geographic names, dates, numbers, or region codes from the original
+- Title must be a headline, not a sentence. Max 30 characters in Korean
 
 OUTPUT FORMAT (JSON):
 {"title":"한국어로 자연스럽게 다듬기. 제품명 영문 유지. 제목만으로 무슨 변화인지 알 수 있어야 함 — 너무 짧거나 모호한 제목 금지. 제목은 30자 내외(최대 40자). 제품명+핵심 변화 한 가지만. 설명이나 배경은 summary에 쓸 것. 예: Azure SQL 업데이트(X) → Azure SQL에서 코드 분석 규칙 설정 및 Fabric 연동 지원(O). 제목에 포함된 상태 표기([Launched] (Preview) 등)는 제거하고 status에만 반영. GCP 날짜형은 YYYY년 M월 D일: 핵심제품 외 N건","summary":"정확히 2문장. 첫 문장: 제목 절대 반복 금지 — 무엇이 가능해졌는지 곧바로 서술. 둘째 문장: 실무에서 왜 중요한지. GCP 다제품: 임팩트 큰 1-2개에 집중하고 나머지는 외 N개 서비스 업데이트 포함으로 마무리","target":"이 변경을 지금 검토해야 할 사람을 역할+구체적 맥락으로 1줄. 개발자/엔지니어 단독 사용 금지. 예: GKE에서 멀티테넌트 클러스터를 운영하는 플랫폼 엔지니어","features":"정확히 3개, 쉼표 구분. 각 항목 15자 이내로 짧게. 동사형 효과 중심. 제품명 나열 금지","regions":"원문에 명시된 리전 그대로. 없으면 모든 리전","status":["상태값만 배열로. 제품명 포함 금지. 유효값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
@@ -129,7 +131,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
         ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
         : row.title_en;
       const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
-      const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
         messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
         max_tokens: 768, temperature: 0.1,
       });
@@ -158,7 +160,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
       await env.DB.prepare(
         'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
       ).bind(row.id, row.csp, lang, row.url, row.pub_date, cleanTitle, parsed.summary || '',
-             parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
+             parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
       translated++;
     } catch (e) {
       console.error(`translate error for article ${row.id}:`, e.message);
@@ -189,6 +191,7 @@ export default {
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
+          OR length(lc.title) > length(a.title_en) * 1.2
         ) LIMIT 5
       `).all();
       for (const row of bad.results) {
@@ -261,7 +264,7 @@ export default {
       try {
         const titleForLLM = row.title_en.length < 20 ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}` : row.title_en;
         const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
-        const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
           max_tokens: 768, temperature: 0.1,
         });
@@ -280,7 +283,7 @@ export default {
           const stat = JSON.stringify(cleanSt.length ? cleanSt : ['정식 출시']);
           await env.DB.prepare(
             'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-          ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '', parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
+          ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '', parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
           return new Response(JSON.stringify({ retranslated: 1, title: cleanTitle }), { headers });
         }
       } catch (e) { console.error(e); }
@@ -298,6 +301,7 @@ export default {
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
+          OR length(lc.title) > length(a.title_en) * 1.2
         ) LIMIT 10
       `).all();
       let retried = 0;
