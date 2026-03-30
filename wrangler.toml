@@ -10,7 +10,7 @@ database_name = "cloud-whats-new"
 database_id = "69d6bd74-5851-4ff1-98ee-521d89830eff"
 
 [triggers]
-crons = ["0 * * * *", "30 * * * *"]
+crons = ["*/15 * * * *", "7,22,37,52 * * * *"]
 
 [ai]
 binding = "AI"
