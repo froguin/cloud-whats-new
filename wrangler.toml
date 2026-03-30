@@ -19,4 +19,8 @@ binding = "AI"
 # wrangler secret put ALERT_WEBHOOK_URL
 [vars]
 ALERT_WEBHOOK_URL = ""
+SITE_URL = "https://whats-new.kr"
 
+
+[env.production.vars]
+SITE_URL = "https://whats-new.kr"

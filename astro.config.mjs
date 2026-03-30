@@ -3,6 +3,7 @@ import cloudflare from '@astrojs/cloudflare';
 import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
+  site: 'https://whats-new.kr',
   output: 'server',
   adapter: cloudflare(),
   integrations: [tailwind()],
