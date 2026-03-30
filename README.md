@@ -2,7 +2,7 @@
 
 Amazon Web Services · Google Cloud · Microsoft Azure 클라우드 최신 업데이트를 한국어로 요약합니다.
 
-**Live**: https://cloud-whats-new.pages.dev
+**Live**: https://whats-new.kr
 
 ## 아키텍처
 
