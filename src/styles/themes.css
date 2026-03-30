@@ -1,3 +1,4 @@
+@import "./amazon-ember.css";
 /* ============================================
    Home — neutral, hub feel
    ============================================ */
@@ -27,7 +28,7 @@
   --color-primary: #0972D3; --color-accent: #FF9900;
   --color-bg: #F2F3F3; --color-surface: #FFFFFF; --color-border: #D5DBDB;
   --color-text-primary: #000716; --color-text-secondary: #5F6B7A;
-  --font-family: 'Open Sans', 'Noto Sans KR', sans-serif;
+  --font-family: 'Amazon Ember', 'Noto Sans KR', sans-serif;
   --font-weight-title: 700;
   --radius: 8px; --nav-bg: #232F3E; --nav-height: 56px;
   --card-shadow: none; --card-hover-shadow: none;
