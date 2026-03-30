@@ -179,7 +179,27 @@ export default {
     } else {
       // :30 — translate only
       const t = await translateNew(env, 'ko', 25);
-      console.log(`Cron:30 — ${t} translated`);
+      // Quality check: find bad translations and re-translate (max 5 per run)
+      const bad = await env.DB.prepare(`
+        SELECT lc.article_id, lc.title, lc.summary, a.title_en FROM localized_content lc
+        JOIN articles a ON lc.article_id = a.id
+        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
+          lc.title LIKE '%.%' AND lc.title LIKE '%graphics%'
+          OR length(lc.title) > 50
+          OR lc.title = a.title_en
+          OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
+          OR length(lc.summary) < 30
+        ) LIMIT 5
+      `).all();
+      for (const row of bad.results) {
+        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
+      }
+      const r = bad.results.length > 0 ? await translateNew(env, 'ko', bad.results.length) : 0;
+      // Mark retried to avoid infinite loop
+      for (const row of bad.results) {
+        await env.DB.prepare("UPDATE localized_content SET model_used = 'retried' WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
+      }
+      console.log(`Cron:30 — ${t} translated, ${bad.results.length} quality-retried`);
     }
     // Alert on consecutive empty fetches
     const webhookUrl = env.ALERT_WEBHOOK_URL;
@@ -265,6 +285,27 @@ export default {
         }
       } catch (e) { console.error(e); }
       return new Response(JSON.stringify({ retranslated: 0, error: 'translation failed' }), { headers });
+    }
+
+    // POST /api/retranslate-bad — bulk retranslate poor quality translations
+    if (path === '/api/retranslate-bad' && request.method === 'POST') {
+      const bad = await env.DB.prepare(`
+        SELECT lc.article_id FROM localized_content lc
+        JOIN articles a ON lc.article_id = a.id
+        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND (
+          lc.title LIKE '%.graphics%'
+          OR length(lc.title) > 50
+          OR lc.title = a.title_en
+          OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
+          OR length(lc.summary) < 30
+        ) LIMIT 10
+      `).all();
+      let retried = 0;
+      for (const row of bad.results) {
+        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
+      }
+      if (bad.results.length > 0) retried = await translateNew(env, 'ko', bad.results.length);
+      return new Response(JSON.stringify({ found: bad.results.length, retried }), { headers });
     }
 
     if (path === '/api/stats') {
