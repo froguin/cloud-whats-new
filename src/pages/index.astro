@@ -26,10 +26,10 @@ const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR'
 <Layout title="What's New — 클라우드 최신 업데이트" vendor="home">
   <!-- Hero -->
   <div class="text-center py-6 sm:py-16 mb-6">
-    <h1 class="text-xl sm:text-4xl font-bold mb-3" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
+    <h1 class="text-2xl sm:text-4xl font-bold mb-3" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
       ☁️ What's New <span class="hidden sm:inline">한국어 요약</span>
     </h1>
-    <p class="text-xs sm:text-lg" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
+    <p class="text-sm sm:text-lg" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
       Amazon Web Services · Google Cloud · Microsoft Azure<br/>클라우드 최신 업데이트를 한국어로 요약합니다
     </p>
   </div>
@@ -39,7 +39,7 @@ const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR'
     {csps.map(c => (
       <section>
         <div class="flex items-center justify-between mb-4 pb-2" style={c.isGradient ? `border-image: ${c.color} 1; border-bottom: 3px solid;` : `border-bottom: 3px solid ${c.color};`}>
-          <h2 class="text-sm sm:text-lg font-bold" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
+          <h2 class="text-base sm:text-lg font-bold" style="color: var(--color-text-primary); font-family: 'Pretendard Variable', var(--font-family);">
             {c.name}
           </h2>
           <a href={`/${c.id}`} class="text-xs font-medium px-2 py-1 rounded" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
@@ -55,7 +55,7 @@ const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR'
                 <div class="flex items-start gap-2">
                   <span class="shrink-0 w-1 h-1 rounded-full mt-2" style={`background: ${c.isGradient ? c.accent : c.color};`}></span>
                   <div class="min-w-0">
-                    <p class="text-xs sm:text-sm font-medium leading-snug mb-1" style="color: var(--color-text-primary); word-break: break-word;">
+                    <p class="text-sm font-medium leading-snug mb-1" style="color: var(--color-text-primary); word-break: break-word;">
                       {a.title}
                     </p>
                     <time class="text-[11px]" style="color: var(--color-text-secondary);">
