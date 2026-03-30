@@ -20,7 +20,3 @@ binding = "AI"
 [vars]
 ALERT_WEBHOOK_URL = ""
 
-# Custom domain route
-routes = [
-  { pattern = "api.whats-new.kr", custom_domain = true }
-]

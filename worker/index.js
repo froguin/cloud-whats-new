@@ -219,7 +219,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
-    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://whats-new.kr', 'Cache-Control': 'public, max-age=3600' };
+    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' };
 
     if (path === '/api/articles') {
       const csp = url.searchParams.get('csp');
