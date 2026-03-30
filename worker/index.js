@@ -13,7 +13,7 @@ RULES:
 - Output ONLY valid JSON, no markdown
 
 OUTPUT FORMAT (JSON):
-{"title":"한국어로 자연스럽게 다듬기. 제품명 영문 유지. 제목만으로 무슨 변화인지 알 수 있어야 함 — 너무 짧거나 모호한 제목 금지. 예: Azure SQL 업데이트(X) → Azure SQL에서 코드 분석 규칙 설정 및 Fabric 연동 지원(O). 제목에 포함된 상태 표기([Launched] (Preview) 등)는 제거하고 status에만 반영. GCP 날짜형은 YYYY년 M월 D일: 핵심제품 외 N건","summary":"정확히 2문장. 첫 문장: 제목 절대 반복 금지 — 무엇이 가능해졌는지 곧바로 서술. 둘째 문장: 실무에서 왜 중요한지. GCP 다제품: 임팩트 큰 1-2개에 집중하고 나머지는 외 N개 서비스 업데이트 포함으로 마무리","target":"이 변경을 지금 검토해야 할 사람을 역할+구체적 맥락으로 1줄. 개발자/엔지니어 단독 사용 금지. 예: GKE에서 멀티테넌트 클러스터를 운영하는 플랫폼 엔지니어","features":"정확히 3개, 쉼표 구분. 각 항목 15자 이내로 짧게. 동사형 효과 중심. 제품명 나열 금지","regions":"원문에 명시된 리전 그대로. 없으면 모든 리전","status":["상태값만 배열로. 제품명 포함 금지. 유효값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
+{"title":"한국어로 자연스럽게 다듬기. 제품명 영문 유지. 제목만으로 무슨 변화인지 알 수 있어야 함 — 너무 짧거나 모호한 제목 금지. 제목은 40자 이내로 간결하게. 본문 내용을 제목에 넣지 말 것. 예: Azure SQL 업데이트(X) → Azure SQL에서 코드 분석 규칙 설정 및 Fabric 연동 지원(O). 제목에 포함된 상태 표기([Launched] (Preview) 등)는 제거하고 status에만 반영. GCP 날짜형은 YYYY년 M월 D일: 핵심제품 외 N건","summary":"정확히 2문장. 첫 문장: 제목 절대 반복 금지 — 무엇이 가능해졌는지 곧바로 서술. 둘째 문장: 실무에서 왜 중요한지. GCP 다제품: 임팩트 큰 1-2개에 집중하고 나머지는 외 N개 서비스 업데이트 포함으로 마무리","target":"이 변경을 지금 검토해야 할 사람을 역할+구체적 맥락으로 1줄. 개발자/엔지니어 단독 사용 금지. 예: GKE에서 멀티테넌트 클러스터를 운영하는 플랫폼 엔지니어","features":"정확히 3개, 쉼표 구분. 각 항목 15자 이내로 짧게. 동사형 효과 중심. 제품명 나열 금지","regions":"원문에 명시된 리전 그대로. 없으면 모든 리전","status":["상태값만 배열로. 제품명 포함 금지. 유효값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
 
 const FEW_SHOT = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
@@ -170,14 +170,11 @@ async function translateNew(env, lang = 'ko', limit = 10) {
 export default {
   async scheduled(event, env, ctx) {
     const n = await fetchRSS(env);
-    // Run translation asynchronously so fetch doesn't block it
-    ctx.waitUntil((async () => {
-      const t = await translateNew(env, 'ko', 25);
-      console.log(`Cron: ${n} new, ${t} translated`);
-      // Cleanup: delete articles older than 30 days
-      await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
-      await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
-    })());
+    const t = await translateNew(env, 'ko', 25);
+    // Cleanup: delete articles older than 30 days
+    await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
+    await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
+    console.log(`Cron: ${n} new, ${t} translated`);
     // Alert on consecutive empty fetches
     const webhookUrl = env.ALERT_WEBHOOK_URL;
     if (webhookUrl && n === 0) {
@@ -247,7 +244,7 @@ export default {
           let cleanTitle = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
           if (cleanTitle.length < 25 && parsed.summary) {
             const first = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
-            if (first.length > cleanTitle.length) cleanTitle = cleanTitle + ': ' + first;
+            if (first.length > cleanTitle.length) cleanTitle = (cleanTitle + ': ' + first).slice(0, 60);
           }
           const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
           const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
