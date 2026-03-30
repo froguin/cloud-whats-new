@@ -19,3 +19,8 @@ binding = "AI"
 # wrangler secret put ALERT_WEBHOOK_URL
 [vars]
 ALERT_WEBHOOK_URL = ""
+
+# Custom domain route
+routes = [
+  { pattern = "api.whats-new.kr", custom_domain = true }
+]
