@@ -191,6 +191,13 @@ async function enqueueTranslationJobs(env, jobs) {
   return queued;
 }
 
+async function enqueueArticleTranslations(env, articleIds, lang = DEFAULT_QUEUE_LANG, reason = 'backlog') {
+  const jobs = articleIds
+    .map((articleId) => ({ articleId, lang, reason }))
+    .filter((job) => !!job.articleId);
+  return enqueueTranslationJobs(env, jobs);
+}
+
 async function getArticleForTranslation(env, articleId) {
   return env.DB.prepare(`
     SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en
@@ -209,7 +216,8 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
-async function translateArticle(env, row) {
+async function translateArticle(env, row, options = {}) {
+  const modelUsed = options.modelUsed || 'cf-llama-3.1-8b';
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
@@ -237,7 +245,7 @@ async function translateArticle(env, row) {
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '',
-         parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
+         parsed.target || 'all', feat, reg, stat, modelUsed).run();
   return true;
 }
 
@@ -323,18 +331,12 @@ export default {
           OR length(lc.summary) < 30
         ) LIMIT 5
       `).all();
-      let retried = 0;
+      const retryIds = [];
       for (const row of bad.results) {
         await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        try {
-          if (await translateArticle(env, row)) {
-            await env.DB.prepare("UPDATE localized_content SET model_used = 'retried' WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-            retried++;
-          }
-        } catch (e) {
-          console.error(`retranslate error for article ${row.id}:`, e.message);
-        }
+        retryIds.push(row.id);
       }
+      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
       const backlog = await getMissingTranslationCount(env, 'ko');
       console.log(`Cron — ${queued} queued for translation, ${retried} quality-retried, ${backlog} waiting for ko`);
     }
@@ -343,6 +345,7 @@ export default {
     for (const msg of batch.messages) {
       const articleId = msg.body?.articleId;
       const lang = msg.body?.lang || DEFAULT_QUEUE_LANG;
+      const reason = msg.body?.reason || 'backlog';
 
       if (!articleId || !lang) {
         msg.ack();
@@ -361,7 +364,9 @@ export default {
           continue;
         }
 
-        if (await translateArticle(env, row)) {
+        if (await translateArticle(env, row, {
+          modelUsed: reason === 'quality_retry' ? 'retried' : 'cf-llama-3.1-8b',
+        })) {
           msg.ack();
           continue;
         }
@@ -446,13 +451,12 @@ export default {
           OR length(lc.summary) < 30
         ) LIMIT 10
       `).all();
-      let retried = 0;
+      const retryIds = [];
       for (const row of bad.results) {
         await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        try {
-          if (await translateArticle(env, row)) retried++;
-        } catch (e) { console.error(`retranslate-bad error for article ${row.id}:`, e.message); }
+        retryIds.push(row.id);
       }
+      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
       return new Response(JSON.stringify({ found: bad.results.length, retried }), { headers });
     }
 
