@@ -15,13 +15,13 @@ queue = "cloud-whats-new-translation-jobs"
 
 [[queues.consumers]]
 queue = "cloud-whats-new-translation-jobs"
-max_batch_size = 5
-max_batch_timeout = 3
+max_batch_size = 10
+max_batch_timeout = 1
 max_retries = 3
 dead_letter_queue = "cloud-whats-new-translation-jobs-dlq"
 
 [triggers]
-crons = ["0 * * * *", "15,30,45 * * * *"]
+crons = ["0,15,30,45 * * * *", "5,10,20,25,35,40,50,55 * * * *"]
 
 [ai]
 binding = "AI"

@@ -30,6 +30,7 @@ const FEW_SHOT = [
 
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
+const FETCH_CRONS = new Set(['0,15,30,45 * * * *', '0 * * * *']);
 
 const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
@@ -298,13 +299,13 @@ async function getMissingTranslationCount(env, lang = 'ko') {
 export default {
   async scheduled(event, env, ctx) {
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
-    if (event.cron === '0 * * * *') {
-      // :00 — fetch RSS + cleanup
+    if (FETCH_CRONS.has(event.cron)) {
+      // quarter-hour fetch RSS + cleanup
       const n = await fetchRSS(env);
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
       const backlog = await getMissingTranslationCount(env, 'ko');
-      console.log(`Cron:00 — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
+      console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
       const webhookUrl = env.ALERT_WEBHOOK_URL;
       if (webhookUrl && n.newArticles === 0) {
