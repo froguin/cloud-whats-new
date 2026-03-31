@@ -248,9 +248,13 @@ export default {
     }
 
     if (path === '/api/trigger' && request.method === 'POST') {
-      const n = await fetchRSS(env);
-      const t = await translateNew(env, 'ko', 10);
-      return new Response(JSON.stringify({ newArticles: n, translated: t }), { headers });
+      const action = url.searchParams.get('action') || 'translate';
+      if (action === 'fetch') {
+        const n = await fetchRSS(env);
+        return new Response(JSON.stringify({ newArticles: n }), { headers });
+      }
+      const t = await translateNew(env, 'ko', 5);
+      return new Response(JSON.stringify({ translated: t }), { headers });
     }
 
     // POST /api/retranslate?id=123 — delete existing ko translation and re-translate
