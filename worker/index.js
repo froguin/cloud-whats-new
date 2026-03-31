@@ -399,7 +399,7 @@ export default {
           OR length(lc.summary) < 30
           OR lc.summary LIKE '%_workflow_%'
           OR lc.summary LIKE '%**%'
-          OR lc.summary LIKE '%`%'
+          OR lc.summary LIKE '%\`%'
         ) LIMIT 5
       `).all();
       const retryIds = [];
@@ -533,7 +533,7 @@ export default {
           OR length(lc.summary) < 30
           OR lc.summary LIKE '%_workflow_%'
           OR lc.summary LIKE '%**%'
-          OR lc.summary LIKE '%`%'
+          OR lc.summary LIKE '%\`%'
         ) LIMIT 10
       `).all();
       const retryIds = [];
