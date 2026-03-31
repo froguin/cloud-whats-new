@@ -148,6 +148,9 @@ async function fetchRSS(env) {
     }
   }
   const queued = await enqueueTranslationJobs(env, jobs);
+  if (jobs.length > 0 && queued === 0) {
+    console.error(`Failed to enqueue ${jobs.length} translation jobs`);
+  }
   return { newArticles: totalNew, queued };
 }
 
@@ -235,10 +238,14 @@ function assessTranslationQuality(record, row) {
 async function enqueueTranslationJobs(env, jobs) {
   if (!env.TRANSLATION_QUEUE || !jobs.length) return 0;
   let queued = 0;
-  for (let i = 0; i < jobs.length; i += 100) {
-    const batch = jobs.slice(i, i + 100).map((job) => ({ body: job }));
-    await env.TRANSLATION_QUEUE.sendBatch(batch);
-    queued += batch.length;
+  try {
+    for (let i = 0; i < jobs.length; i += 100) {
+      const batch = jobs.slice(i, i + 100).map((job) => ({ body: job }));
+      await env.TRANSLATION_QUEUE.sendBatch(batch);
+      queued += batch.length;
+    }
+  } catch (e) {
+    console.error(`Failed to enqueue translation jobs: ${e.message}`);
   }
   return queued;
 }
@@ -450,10 +457,10 @@ export default {
           continue;
         }
 
-        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts) });
+        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts || 0) });
       } catch (e) {
         console.error(`queue translate error for article ${articleId}:`, e.message);
-        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts) });
+        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts || 0) });
       }
     }
   },
