@@ -119,7 +119,7 @@ async function translateArticle(env, row) {
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
   const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
-  const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+  const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     max_tokens: 768, temperature: 0.1,
   });
@@ -144,7 +144,7 @@ async function translateArticle(env, row) {
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '',
-         parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
+         parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
   return true;
 }
 
