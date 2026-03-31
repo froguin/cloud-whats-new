@@ -114,8 +114,41 @@ function safeParseJSON(text) {
   try { return JSON.parse(clean.slice(start, end)); } catch { return null; }
 }
 
+async function translateArticle(env, row) {
+  const titleForLLM = row.title_en.length < 20
+    ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
+    : row.title_en;
+  const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
+    max_tokens: 768, temperature: 0.1,
+  });
+  const parsed = safeParseJSON(aiResp.response || '');
+  if (!parsed || !parsed.title) return false;
+  let cleanTitle = parsed.title
+    .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if (cleanTitle.length < 25 && parsed.summary) {
+    const firstSentence = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
+    if (firstSentence.length > cleanTitle.length) cleanTitle = (cleanTitle + ': ' + firstSentence).slice(0, 60);
+  }
+  const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
+  const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
+  const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
+  const rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
+  const cleanStatus = [...new Set(rawStatus.flatMap(s => {
+    for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; }
+    return [];
+  }))];
+  const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '',
+         parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
+  return true;
+}
+
 async function translateNew(env, lang = 'ko', limit = 10) {
-  // Find articles that have 'en' but not target lang
   const rows = await env.DB.prepare(`
     SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en
     FROM articles a
@@ -126,42 +159,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
   let translated = 0;
   for (const row of rows.results) {
     try {
-      // If title is just a product name, prepend description hint
-      const titleForLLM = row.title_en.length < 20
-        ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
-        : row.title_en;
-      const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
-      const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
-        max_tokens: 768, temperature: 0.1,
-      });
-      const parsed = safeParseJSON(aiResp.response || '');
-      if (!parsed || !parsed.title) continue;
-      // Strip status markers from translated title
-      let cleanTitle = parsed.title
-        .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
-        .replace(/\s+/g, ' ').trim();
-      // If title is too short/vague, enrich from summary
-      if (cleanTitle.length < 25 && parsed.summary) {
-        const firstSentence = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
-        if (firstSentence.length > cleanTitle.length) cleanTitle = cleanTitle + ': ' + firstSentence;
-      }
-      const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
-      const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
-      // Force-normalize status: only allow known values
-      const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
-      let rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
-      const cleanStatus = [...new Set(rawStatus.flatMap(s => {
-        // Extract valid status from strings like "Vertex AI: 정식 출시"
-        for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; }
-        return [];
-      }))];
-      const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
-      await env.DB.prepare(
-        'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-      ).bind(row.id, row.csp, lang, row.url, row.pub_date, cleanTitle, parsed.summary || '',
-             parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
-      translated++;
+      if (await translateArticle(env, row)) translated++;
     } catch (e) {
       console.error(`translate error for article ${row.id}:`, e.message);
     }
@@ -178,42 +176,45 @@ export default {
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
       console.log(`Cron:00 — ${n} new articles`);
+      // Alert on consecutive empty fetches
+      const webhookUrl = env.ALERT_WEBHOOK_URL;
+      if (webhookUrl && n === 0) {
+        const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
+        if (prev && prev.c === 0) {
+          await fetch(webhookUrl, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: `⚠️ What's New: 3시간 연속 새 기사 없음. RSS 피드 확인 필요.` }),
+          }).catch(() => {});
+        }
+      }
     } else {
-      // :30 — translate only
+      // translate new articles
       const t = await translateNew(env, 'ko', 25);
-      // Quality check: find bad translations and re-translate (max 5 per run)
+      // Quality check: find bad translations and re-translate each specific article (max 5 per run)
       const bad = await env.DB.prepare(`
-        SELECT lc.article_id, lc.title, lc.summary, a.title_en FROM localized_content lc
+        SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
         WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
-          lc.title LIKE '%.%' AND lc.title LIKE '%graphics%'
+          lc.title LIKE '%.graphics%'
           OR length(lc.title) > 50
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
-          OR length(lc.title) > length(a.title_en) * 1.2
         ) LIMIT 5
       `).all();
+      let retried = 0;
       for (const row of bad.results) {
-        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
+        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
+        try {
+          if (await translateArticle(env, row)) {
+            await env.DB.prepare("UPDATE localized_content SET model_used = 'retried' WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
+            retried++;
+          }
+        } catch (e) {
+          console.error(`retranslate error for article ${row.id}:`, e.message);
+        }
       }
-      const r = bad.results.length > 0 ? await translateNew(env, 'ko', bad.results.length) : 0;
-      // Mark retried to avoid infinite loop
-      for (const row of bad.results) {
-        await env.DB.prepare("UPDATE localized_content SET model_used = 'retried' WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
-      }
-      console.log(`Cron:30 — ${t} translated, ${bad.results.length} quality-retried`);
-    }
-    // Alert on consecutive empty fetches
-    const webhookUrl = env.ALERT_WEBHOOK_URL;
-    if (webhookUrl && n === 0) {
-      const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
-      if (prev && prev.c === 0) {
-        await fetch(webhookUrl, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: `⚠️ What's New: 3시간 연속 새 기사 없음. RSS 피드 확인 필요.` }),
-        }).catch(() => {});
-      }
+      console.log(`Cron — ${t} translated, ${retried} quality-retried`);
     }
   },
   async fetch(request, env) {
@@ -258,33 +259,12 @@ export default {
       const id = url.searchParams.get('id');
       if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).run();
-      // Translate this specific article
       const row = await env.DB.prepare('SELECT id, csp, url, pub_date, title_en, description_en FROM articles WHERE id = ?').bind(id).first();
       if (!row) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
       try {
-        const titleForLLM = row.title_en.length < 20 ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}` : row.title_en;
-        const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 800)}`;
-        const aiResp = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-          messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
-          max_tokens: 768, temperature: 0.1,
-        });
-        const parsed = safeParseJSON(aiResp.response || '');
-        if (parsed && parsed.title) {
-          let cleanTitle = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
-          if (cleanTitle.length < 25 && parsed.summary) {
-            const first = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
-            if (first.length > cleanTitle.length) cleanTitle = (cleanTitle + ': ' + first).slice(0, 60);
-          }
-          const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
-          const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
-          const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
-          let rawSt = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
-          const cleanSt = [...new Set(rawSt.flatMap(s => { for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; } return []; }))];
-          const stat = JSON.stringify(cleanSt.length ? cleanSt : ['정식 출시']);
-          await env.DB.prepare(
-            'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-          ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '', parsed.target || 'all', feat, reg, stat, 'cf-llama-3.3-70b').run();
-          return new Response(JSON.stringify({ retranslated: 1, title: cleanTitle }), { headers });
+        if (await translateArticle(env, row)) {
+          const result = await env.DB.prepare("SELECT title FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).first();
+          return new Response(JSON.stringify({ retranslated: 1, title: result?.title }), { headers });
         }
       } catch (e) { console.error(e); }
       return new Response(JSON.stringify({ retranslated: 0, error: 'translation failed' }), { headers });
@@ -293,22 +273,23 @@ export default {
     // POST /api/retranslate-bad — bulk retranslate poor quality translations
     if (path === '/api/retranslate-bad' && request.method === 'POST') {
       const bad = await env.DB.prepare(`
-        SELECT lc.article_id FROM localized_content lc
+        SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND (
+        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
           lc.title LIKE '%.graphics%'
           OR length(lc.title) > 50
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
-          OR length(lc.title) > length(a.title_en) * 1.2
         ) LIMIT 10
       `).all();
       let retried = 0;
       for (const row of bad.results) {
-        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.article_id).run();
+        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
+        try {
+          if (await translateArticle(env, row)) retried++;
+        } catch (e) { console.error(`retranslate-bad error for article ${row.id}:`, e.message); }
       }
-      if (bad.results.length > 0) retried = await translateNew(env, 'ko', bad.results.length);
       return new Response(JSON.stringify({ found: bad.results.length, retried }), { headers });
     }
 
