@@ -9,6 +9,17 @@ binding = "DB"
 database_name = "cloud-whats-new"
 database_id = "69d6bd74-5851-4ff1-98ee-521d89830eff"
 
+[[queues.producers]]
+binding = "TRANSLATION_QUEUE"
+queue = "cloud-whats-new-translation-jobs"
+
+[[queues.consumers]]
+queue = "cloud-whats-new-translation-jobs"
+max_batch_size = 5
+max_batch_timeout = 3
+max_retries = 3
+dead_letter_queue = "cloud-whats-new-translation-jobs-dlq"
+
 [triggers]
 crons = ["0 * * * *", "15,30,45 * * * *"]
 
@@ -20,14 +31,12 @@ binding = "AI"
 [vars]
 ALERT_WEBHOOK_URL = ""
 SITE_URL = "https://whats-new.kr"
-TRANSLATE_BATCH_SIZE = "25"
-POST_FETCH_TRANSLATE_BATCH_SIZE = "25"
+BACKLOG_QUEUE_BATCH_SIZE = "25"
 
 
 [env.production.vars]
 SITE_URL = "https://whats-new.kr"
-TRANSLATE_BATCH_SIZE = "25"
-POST_FETCH_TRANSLATE_BATCH_SIZE = "25"
+BACKLOG_QUEUE_BATCH_SIZE = "25"
 
 routes = [
   { pattern = "api.whats-new.kr", custom_domain = true }
