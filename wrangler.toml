@@ -24,3 +24,7 @@ SITE_URL = "https://whats-new.kr"
 
 [env.production.vars]
 SITE_URL = "https://whats-new.kr"
+
+routes = [
+  { pattern = "api.whats-new.kr", custom_domain = true }
+]

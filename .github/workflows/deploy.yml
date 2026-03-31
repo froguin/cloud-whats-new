@@ -23,7 +23,6 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: echo "WORKER_URL=${{ secrets.WORKER_URL }}" > .env
       - run: npm run build
       - uses: cloudflare/wrangler-action@v3
         with:
