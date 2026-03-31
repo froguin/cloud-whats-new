@@ -20,10 +20,14 @@ binding = "AI"
 [vars]
 ALERT_WEBHOOK_URL = ""
 SITE_URL = "https://whats-new.kr"
+TRANSLATE_BATCH_SIZE = "25"
+POST_FETCH_TRANSLATE_BATCH_SIZE = "25"
 
 
 [env.production.vars]
 SITE_URL = "https://whats-new.kr"
+TRANSLATE_BATCH_SIZE = "25"
+POST_FETCH_TRANSLATE_BATCH_SIZE = "25"
 
 routes = [
   { pattern = "api.whats-new.kr", custom_domain = true }

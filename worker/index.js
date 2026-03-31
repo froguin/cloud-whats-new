@@ -28,8 +28,44 @@ const FEW_SHOT = [
   { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
+const TRANSLATION_JSON_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      title: { type: 'string' },
+      summary: { type: 'string' },
+      target: { type: 'string' },
+      features: {
+        oneOf: [
+          { type: 'string' },
+          { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 3 },
+        ],
+      },
+      regions: {
+        oneOf: [
+          { type: 'string' },
+          { type: 'array', items: { type: 'string' } },
+        ],
+      },
+      status: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    },
+    required: ['title', 'summary', 'target', 'features', 'regions', 'status'],
+  },
+};
+
 function decodeEntities(s) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+
+function getEnvInt(env, key, fallback, min = 1, max = 200) {
+  const value = parseInt(env[key] || '', 10);
+  if (Number.isNaN(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
 }
 
 function parseRSS(xml, csp) {
@@ -114,6 +150,24 @@ function safeParseJSON(text) {
   try { return JSON.parse(clean.slice(start, end)); } catch { return null; }
 }
 
+function parseAIResponse(aiResp) {
+  if (!aiResp) return null;
+  if (aiResp.response && typeof aiResp.response === 'object') return aiResp.response;
+  if (typeof aiResp.response === 'string') return safeParseJSON(aiResp.response);
+  if (typeof aiResp === 'string') return safeParseJSON(aiResp);
+  return null;
+}
+
+function normalizeShortList(value, maxItems = 3) {
+  const items = Array.isArray(value)
+    ? value
+    : String(value || '').split(',');
+  return items
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
 async function translateArticle(env, row) {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
@@ -121,19 +175,17 @@ async function translateArticle(env, row) {
   const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
   const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
+    response_format: TRANSLATION_JSON_SCHEMA,
     max_tokens: 768, temperature: 0.1,
   });
-  const parsed = safeParseJSON(aiResp.response || '');
+  const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return false;
   let cleanTitle = parsed.title
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
-  if (cleanTitle.length < 25 && parsed.summary) {
-    const firstSentence = parsed.summary.split(/[.。!]/).filter(s => s.trim())[0]?.trim() || '';
-    if (firstSentence.length > cleanTitle.length) cleanTitle = (cleanTitle + ': ' + firstSentence).slice(0, 60);
-  }
-  const feat = Array.isArray(parsed.features) ? parsed.features.join(', ') : (parsed.features || '');
-  const reg = Array.isArray(parsed.regions) ? parsed.regions.join(', ') : (parsed.regions || '');
+  cleanTitle = cleanTitle.slice(0, 50).trim();
+  const feat = normalizeShortList(parsed.features).join(', ');
+  const reg = normalizeShortList(parsed.regions, 10).join(', ') || '모든 리전';
   const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
   const rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
   const cleanStatus = [...new Set(rawStatus.flatMap(s => {
@@ -167,14 +219,30 @@ async function translateNew(env, lang = 'ko', limit = 10) {
   return translated;
 }
 
+async function getMissingTranslationCount(env, lang = 'ko') {
+  const row = await env.DB.prepare(`
+    SELECT count(*) as missing
+    FROM articles a
+    WHERE NOT EXISTS (
+      SELECT 1 FROM localized_content lc
+      WHERE lc.article_id = a.id AND lc.lang = ?
+    )
+  `).bind(lang).first();
+  return row?.missing || 0;
+}
+
 export default {
   async scheduled(event, env, ctx) {
+    const translateBatchSize = getEnvInt(env, 'TRANSLATE_BATCH_SIZE', 25);
+    const postFetchTranslateBatchSize = getEnvInt(env, 'POST_FETCH_TRANSLATE_BATCH_SIZE', translateBatchSize);
     if (event.cron === '0 * * * *') {
       // :00 — fetch RSS + cleanup
       const n = await fetchRSS(env);
+      const translatedAfterFetch = n > 0 ? await translateNew(env, 'ko', postFetchTranslateBatchSize) : 0;
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
-      console.log(`Cron:00 — ${n} new articles`);
+      const backlog = await getMissingTranslationCount(env, 'ko');
+      console.log(`Cron:00 — ${n} new articles, ${translatedAfterFetch} translated immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
       const webhookUrl = env.ALERT_WEBHOOK_URL;
       if (webhookUrl && n === 0) {
@@ -188,7 +256,7 @@ export default {
       }
     } else {
       // translate new articles
-      const t = await translateNew(env, 'ko', 10);
+      const t = await translateNew(env, 'ko', translateBatchSize);
       // Quality check: find bad translations and re-translate each specific article (max 5 per run)
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
@@ -213,10 +281,13 @@ export default {
           console.error(`retranslate error for article ${row.id}:`, e.message);
         }
       }
-      console.log(`Cron — ${t} translated, ${retried} quality-retried`);
+      const backlog = await getMissingTranslationCount(env, 'ko');
+      console.log(`Cron — ${t} translated, ${retried} quality-retried, ${backlog} waiting for ko`);
     }
   },
   async fetch(request, env) {
+    const translateBatchSize = getEnvInt(env, 'TRANSLATE_BATCH_SIZE', 25);
+    const postFetchTranslateBatchSize = getEnvInt(env, 'POST_FETCH_TRANSLATE_BATCH_SIZE', translateBatchSize);
     const url = new URL(request.url);
     const path = url.pathname;
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://whats-new.kr', 'Cache-Control': 'public, max-age=3600' };
@@ -251,10 +322,13 @@ export default {
       const action = url.searchParams.get('action') || 'translate';
       if (action === 'fetch') {
         const n = await fetchRSS(env);
-        return new Response(JSON.stringify({ newArticles: n }), { headers });
+        const translated = n > 0 ? await translateNew(env, 'ko', postFetchTranslateBatchSize) : 0;
+        const backlog = await getMissingTranslationCount(env, 'ko');
+        return new Response(JSON.stringify({ newArticles: n, translated, backlog }), { headers });
       }
-      const t = await translateNew(env, 'ko', 5);
-      return new Response(JSON.stringify({ translated: t }), { headers });
+      const t = await translateNew(env, 'ko', translateBatchSize);
+      const backlog = await getMissingTranslationCount(env, 'ko');
+      return new Response(JSON.stringify({ translated: t, backlog }), { headers });
     }
 
     // POST /api/retranslate?id=123 — delete existing ko translation and re-translate
