@@ -65,3 +65,25 @@ const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleSt
     });
   </script>
 </Layout>
+
+<script>
+  // Auto-expand card when navigated via hash anchor
+  function expandTarget() {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const card = document.querySelector(hash);
+    if (!card) return;
+    // Expand line-clamps
+    card.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
+      el.style.webkitLineClamp = 'unset';
+    });
+    // Highlight briefly
+    card.style.outline = '3px solid var(--color-primary)';
+    card.style.outlineOffset = '2px';
+    setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 3000);
+    // Scroll with offset for header
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  }
+  expandTarget();
+  window.addEventListener('hashchange', expandTarget);
+</script>
