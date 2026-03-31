@@ -169,8 +169,7 @@ async function translateNew(env, lang = 'ko', limit = 10) {
 
 export default {
   async scheduled(event, env, ctx) {
-    const minute = new Date(event.scheduledTime).getMinutes();
-    if (minute === 0) {
+    if (event.cron === '0 * * * *') {
       // :00 — fetch RSS + cleanup
       const n = await fetchRSS(env);
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
