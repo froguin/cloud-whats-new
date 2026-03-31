@@ -2,10 +2,10 @@
 interface Props {
   title: string; date: string; content: string; csp?: string;
   target?: string; features?: string; regions?: string; status?: string;
-  originalLink?: string; index?: number; isFallback?: boolean; originalTitle?: string;
+  originalLink?: string; index?: number; articleId?: number; isFallback?: boolean; originalTitle?: string;
 }
 
-const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, isFallback = false, originalTitle } = Astro.props;
+const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, articleId, isFallback = false, originalTitle } = Astro.props;
 
 let statuses: string[] = [];
 try {
@@ -29,7 +29,7 @@ const hasDetails = !!(target || features || regions);
 {csp === 'aws' ? (
   <!-- AWS Cloudscape: bordered, dense, orange accent -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    class="aws-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class="aws-card block no-underline overflow-hidden transition-all duration-200"
     style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px; border-left:4px solid #0972D3;">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -51,7 +51,7 @@ const hasDetails = !!(target || features || regions);
 ) : csp === 'gcp' ? (
   <!-- GCP Material: rounded, floating, 4-color accent rotation -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    class="gcp-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class="gcp-card block no-underline overflow-hidden transition-all duration-200"
     style={`background:var(--color-surface); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent};`}>
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -73,7 +73,7 @@ const hasDetails = !!(target || features || regions);
 ) : (
   <!-- Azure Fluent: spacious, subtle, clean -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    class="azure-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class="azure-card block no-underline overflow-hidden transition-all duration-200"
     style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
     <div class="p-5 sm:p-6">
       <div class="flex items-center gap-1.5 mb-3 flex-wrap">

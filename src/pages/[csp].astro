@@ -48,7 +48,7 @@ const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleSt
         title={a.title} csp={a.csp} index={i}
         date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
         content={a.summary || ''} target={a.target} features={a.features}
-        regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} originalTitle={a.original_title} />
+        regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} originalTitle={a.original_title} articleId={a.article_id} />
     ))}
   </div>
 
