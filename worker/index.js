@@ -181,6 +181,57 @@ function normalizeShortList(value, maxItems = 3) {
     .slice(0, maxItems);
 }
 
+function countSentences(text) {
+  return String(text || '')
+    .split(/[.!?。]+/)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
+
+function hasUnbalancedBrackets(text) {
+  const pairs = [['(', ')'], ['[', ']']];
+  return pairs.some(([open, close]) => {
+    const opens = (text.match(new RegExp(`\\${open}`, 'g')) || []).length;
+    const closes = (text.match(new RegExp(`\\${close}`, 'g')) || []).length;
+    return opens !== closes;
+  });
+}
+
+function hasMarkdownArtifacts(text) {
+  return /_[A-Za-z0-9-]+_|\*\*|`/.test(String(text || ''));
+}
+
+function hasDanglingTitleFragment(title) {
+  const value = String(title || '').trim();
+  return /(?:\s|\/|-)[A-Za-z]$/.test(value)
+    || /[(:\-\/]$/.test(value)
+    || hasUnbalancedBrackets(value);
+}
+
+function assessTranslationQuality(record, row) {
+  const reasons = [];
+  const title = String(record.title || '').trim();
+  const summary = String(record.summary || '').trim();
+  const target = String(record.target || '').trim();
+  const features = normalizeShortList(record.features);
+
+  if (!title || !summary) reasons.push('missing-core-fields');
+  if (title.length > 50) reasons.push('title-too-long');
+  if (hasDanglingTitleFragment(title)) reasons.push('title-truncated');
+  if (hasMarkdownArtifacts(title) || hasMarkdownArtifacts(summary)) reasons.push('markdown-artifact');
+  if (title === row.title_en) reasons.push('title-not-translated');
+  if (summary.length < 30) reasons.push('summary-too-short');
+  if (countSentences(summary) !== 2) reasons.push('summary-not-two-sentences');
+  if (summary.slice(0, 24) === title.slice(0, 24)) reasons.push('summary-repeats-title');
+  if (!target || target === 'all') reasons.push('target-too-generic');
+  if (features.length < 2) reasons.push('features-too-thin');
+
+  return {
+    pass: reasons.length === 0,
+    reasons,
+  };
+}
+
 async function enqueueTranslationJobs(env, jobs) {
   if (!env.TRANSLATION_QUEUE || !jobs.length) return 0;
   let queued = 0;
@@ -219,6 +270,7 @@ async function hasLocalizedContent(env, articleId, lang) {
 
 async function translateArticle(env, row, options = {}) {
   const modelUsed = options.modelUsed || 'cf-llama-3.1-8b';
+  const allowLowQuality = !!options.allowLowQuality;
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
@@ -243,11 +295,23 @@ async function translateArticle(env, row, options = {}) {
     return [];
   }))];
   const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
+  const record = {
+    title: cleanTitle,
+    summary: parsed.summary || '',
+    target: parsed.target || 'all',
+    features: feat,
+    regions: reg,
+    status: stat,
+  };
+  const quality = assessTranslationQuality(record, row);
+  if (!quality.pass && !allowLowQuality) {
+    return { ok: false, needsRetry: true, reasons: quality.reasons };
+  }
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '',
-         parsed.target || 'all', feat, reg, stat, modelUsed).run();
-  return true;
+  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
+         record.target, record.features, record.regions, record.status, modelUsed).run();
+  return { ok: true, quality };
 }
 
 async function translateNew(env, lang = 'ko', limit = 10) {
@@ -261,7 +325,8 @@ async function translateNew(env, lang = 'ko', limit = 10) {
   let translated = 0;
   for (const row of rows.results) {
     try {
-      if (await translateArticle(env, row)) translated++;
+      const result = await translateArticle(env, row, { allowLowQuality: true });
+      if (result?.ok) translated++;
     } catch (e) {
       console.error(`translate error for article ${row.id}:`, e.message);
     }
@@ -320,16 +385,21 @@ export default {
     } else {
       // queue backlog articles for translation
       const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
-      // Quality check: find bad translations and re-translate each specific article (max 5 per run)
+      // Backstop quality check for already-saved low quality translations (max 5 per run)
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
         WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
           lc.title LIKE '%.graphics%'
           OR length(lc.title) > 50
+          OR lc.title GLOB '* [A-Za-z]'
+          OR lc.title GLOB '*[(/-]'
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
+          OR lc.summary LIKE '%_workflow_%'
+          OR lc.summary LIKE '%**%'
+          OR lc.summary LIKE '%`%'
         ) LIMIT 5
       `).all();
       const retryIds = [];
@@ -365,9 +435,17 @@ export default {
           continue;
         }
 
-        if (await translateArticle(env, row, {
+        const result = await translateArticle(env, row, {
           modelUsed: reason === 'quality_retry' ? 'retried' : 'cf-llama-3.1-8b',
-        })) {
+          allowLowQuality: reason === 'quality_retry' || reason === 'manual',
+        });
+        if (result?.ok) {
+          msg.ack();
+          continue;
+        }
+
+        if (result?.needsRetry && reason !== 'quality_retry') {
+          await enqueueArticleTranslations(env, [articleId], lang, 'quality_retry');
           msg.ack();
           continue;
         }
@@ -431,9 +509,10 @@ export default {
       const row = await env.DB.prepare('SELECT id, csp, url, pub_date, title_en, description_en FROM articles WHERE id = ?').bind(id).first();
       if (!row) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
       try {
-        if (await translateArticle(env, row)) {
-          const result = await env.DB.prepare("SELECT title FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).first();
-          return new Response(JSON.stringify({ retranslated: 1, title: result?.title }), { headers });
+        const translation = await translateArticle(env, row, { modelUsed: 'manual', allowLowQuality: true });
+        if (translation?.ok) {
+          const saved = await env.DB.prepare("SELECT title FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).first();
+          return new Response(JSON.stringify({ retranslated: 1, title: saved?.title }), { headers });
         }
       } catch (e) { console.error(e); }
       return new Response(JSON.stringify({ retranslated: 0, error: 'translation failed' }), { headers });
@@ -447,9 +526,14 @@ export default {
         WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
           lc.title LIKE '%.graphics%'
           OR length(lc.title) > 50
+          OR lc.title GLOB '* [A-Za-z]'
+          OR lc.title GLOB '*[(/-]'
           OR lc.title = a.title_en
           OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
           OR length(lc.summary) < 30
+          OR lc.summary LIKE '%_workflow_%'
+          OR lc.summary LIKE '%**%'
+          OR lc.summary LIKE '%`%'
         ) LIMIT 10
       `).all();
       const retryIds = [];
