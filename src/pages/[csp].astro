@@ -6,7 +6,7 @@ const { csp } = Astro.params;
 const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
-const API_BASE = import.meta.env.WORKER_URL || 'https://WORKER_URL_REDACTED';
+const API_BASE = import.meta.env.WORKER_URL || '';
 
 let articles: any[] = [];
 try {
