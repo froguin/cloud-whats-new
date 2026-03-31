@@ -67,6 +67,7 @@ const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleSt
 </Layout>
 
 <script>
+  // Auto-expand card when navigated via hash anchor
   function expandTarget() {
     const hash = window.location.hash;
     if (!hash) return;

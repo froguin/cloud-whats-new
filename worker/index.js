@@ -28,6 +28,9 @@ const FEW_SHOT = [
   { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
+const DEFAULT_QUEUE_LANG = 'ko';
+const RETRY_BASE_DELAY_SECONDS = 30;
+
 const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
   json_schema: {
@@ -113,6 +116,7 @@ function parseRSS(xml, csp) {
 
 async function fetchRSS(env) {
   let totalNew = 0;
+  const jobs = [];
   for (const [csp, url] of Object.entries(RSS_FEEDS)) {
     try {
       const resp = await fetch(url, { headers: { 'User-Agent': 'CloudWhatsNew/2.0' }, redirect: 'follow' });
@@ -130,6 +134,9 @@ async function fetchRSS(env) {
         // Always ensure English localized_content exists
         const row = await env.DB.prepare('SELECT id FROM articles WHERE csp=? AND url=? AND title_en=?').bind(csp, item.url || '', item.title).first();
         if (row) {
+          if (r.meta.changes > 0) {
+            jobs.push({ articleId: row.id, lang: DEFAULT_QUEUE_LANG, reason: 'new' });
+          }
           await env.DB.prepare(
             'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
           ).bind(row.id, csp, 'en', item.url || '', item.pub_date, item.title, item.description, '').run();
@@ -139,7 +146,8 @@ async function fetchRSS(env) {
       console.error(`${csp} fetch error:`, e.message);
     }
   }
-  return totalNew;
+  const queued = await enqueueTranslationJobs(env, jobs);
+  return { newArticles: totalNew, queued };
 }
 
 function safeParseJSON(text) {
@@ -148,6 +156,10 @@ function safeParseJSON(text) {
   const end = clean.lastIndexOf('}') + 1;
   if (start < 0 || end <= start) return null;
   try { return JSON.parse(clean.slice(start, end)); } catch { return null; }
+}
+
+function calculateRetryDelay(attempts, baseDelay = RETRY_BASE_DELAY_SECONDS, maxDelay = 300) {
+  return Math.min(baseDelay * Math.max(1, attempts), maxDelay);
 }
 
 function parseAIResponse(aiResp) {
@@ -168,7 +180,44 @@ function normalizeShortList(value, maxItems = 3) {
     .slice(0, maxItems);
 }
 
-async function translateArticle(env, row) {
+async function enqueueTranslationJobs(env, jobs) {
+  if (!env.TRANSLATION_QUEUE || !jobs.length) return 0;
+  let queued = 0;
+  for (let i = 0; i < jobs.length; i += 100) {
+    const batch = jobs.slice(i, i + 100).map((job) => ({ body: job }));
+    await env.TRANSLATION_QUEUE.sendBatch(batch);
+    queued += batch.length;
+  }
+  return queued;
+}
+
+async function enqueueArticleTranslations(env, articleIds, lang = DEFAULT_QUEUE_LANG, reason = 'backlog') {
+  const jobs = articleIds
+    .map((articleId) => ({ articleId, lang, reason }))
+    .filter((job) => !!job.articleId);
+  return enqueueTranslationJobs(env, jobs);
+}
+
+async function getArticleForTranslation(env, articleId) {
+  return env.DB.prepare(`
+    SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en
+    FROM articles a
+    WHERE a.id = ?
+  `).bind(articleId).first();
+}
+
+async function hasLocalizedContent(env, articleId, lang) {
+  const row = await env.DB.prepare(`
+    SELECT 1 as found
+    FROM localized_content
+    WHERE article_id = ? AND lang = ?
+    LIMIT 1
+  `).bind(articleId, lang).first();
+  return !!row?.found;
+}
+
+async function translateArticle(env, row, options = {}) {
+  const modelUsed = options.modelUsed || 'cf-llama-3.1-8b';
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
@@ -196,7 +245,7 @@ async function translateArticle(env, row) {
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, cleanTitle, parsed.summary || '',
-         parsed.target || 'all', feat, reg, stat, 'cf-llama-3.1-8b').run();
+         parsed.target || 'all', feat, reg, stat, modelUsed).run();
   return true;
 }
 
@@ -219,6 +268,21 @@ async function translateNew(env, lang = 'ko', limit = 10) {
   return translated;
 }
 
+async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit = 25) {
+  const rows = await env.DB.prepare(`
+    SELECT a.id
+    FROM articles a
+    WHERE NOT EXISTS (
+      SELECT 1 FROM localized_content lc
+      WHERE lc.article_id = a.id AND lc.lang = ?
+    )
+    ORDER BY a.created_at DESC
+    LIMIT ?
+  `).bind(lang, limit).all();
+  const jobs = rows.results.map((row) => ({ articleId: row.id, lang, reason: 'backlog' }));
+  return enqueueTranslationJobs(env, jobs);
+}
+
 async function getMissingTranslationCount(env, lang = 'ko') {
   const row = await env.DB.prepare(`
     SELECT count(*) as missing
@@ -233,19 +297,17 @@ async function getMissingTranslationCount(env, lang = 'ko') {
 
 export default {
   async scheduled(event, env, ctx) {
-    const translateBatchSize = getEnvInt(env, 'TRANSLATE_BATCH_SIZE', 25);
-    const postFetchTranslateBatchSize = getEnvInt(env, 'POST_FETCH_TRANSLATE_BATCH_SIZE', translateBatchSize);
+    const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     if (event.cron === '0 * * * *') {
       // :00 — fetch RSS + cleanup
       const n = await fetchRSS(env);
-      const translatedAfterFetch = n > 0 ? await translateNew(env, 'ko', postFetchTranslateBatchSize) : 0;
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
       const backlog = await getMissingTranslationCount(env, 'ko');
-      console.log(`Cron:00 — ${n} new articles, ${translatedAfterFetch} translated immediately, ${backlog} waiting for ko`);
+      console.log(`Cron:00 — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
       const webhookUrl = env.ALERT_WEBHOOK_URL;
-      if (webhookUrl && n === 0) {
+      if (webhookUrl && n.newArticles === 0) {
         const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
         if (prev && prev.c === 0) {
           await fetch(webhookUrl, {
@@ -255,8 +317,8 @@ export default {
         }
       }
     } else {
-      // translate new articles
-      const t = await translateNew(env, 'ko', translateBatchSize);
+      // queue backlog articles for translation
+      const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       // Quality check: find bad translations and re-translate each specific article (max 5 per run)
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
@@ -269,25 +331,55 @@ export default {
           OR length(lc.summary) < 30
         ) LIMIT 5
       `).all();
-      let retried = 0;
+      const retryIds = [];
       for (const row of bad.results) {
         await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        try {
-          if (await translateArticle(env, row)) {
-            await env.DB.prepare("UPDATE localized_content SET model_used = 'retried' WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-            retried++;
-          }
-        } catch (e) {
-          console.error(`retranslate error for article ${row.id}:`, e.message);
-        }
+        retryIds.push(row.id);
       }
+      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
       const backlog = await getMissingTranslationCount(env, 'ko');
-      console.log(`Cron — ${t} translated, ${retried} quality-retried, ${backlog} waiting for ko`);
+      console.log(`Cron — ${queued} queued for translation, ${retried} quality-retried, ${backlog} waiting for ko`);
+    }
+  },
+  async queue(batch, env, ctx) {
+    for (const msg of batch.messages) {
+      const articleId = msg.body?.articleId;
+      const lang = msg.body?.lang || DEFAULT_QUEUE_LANG;
+      const reason = msg.body?.reason || 'backlog';
+
+      if (!articleId || !lang) {
+        msg.ack();
+        continue;
+      }
+
+      try {
+        if (await hasLocalizedContent(env, articleId, lang)) {
+          msg.ack();
+          continue;
+        }
+
+        const row = await getArticleForTranslation(env, articleId);
+        if (!row) {
+          msg.ack();
+          continue;
+        }
+
+        if (await translateArticle(env, row, {
+          modelUsed: reason === 'quality_retry' ? 'retried' : 'cf-llama-3.1-8b',
+        })) {
+          msg.ack();
+          continue;
+        }
+
+        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts) });
+      } catch (e) {
+        console.error(`queue translate error for article ${articleId}:`, e.message);
+        msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts) });
+      }
     }
   },
   async fetch(request, env) {
-    const translateBatchSize = getEnvInt(env, 'TRANSLATE_BATCH_SIZE', 25);
-    const postFetchTranslateBatchSize = getEnvInt(env, 'POST_FETCH_TRANSLATE_BATCH_SIZE', translateBatchSize);
+    const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const url = new URL(request.url);
     const path = url.pathname;
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://whats-new.kr', 'Cache-Control': 'public, max-age=3600' };
@@ -322,13 +414,12 @@ export default {
       const action = url.searchParams.get('action') || 'translate';
       if (action === 'fetch') {
         const n = await fetchRSS(env);
-        const translated = n > 0 ? await translateNew(env, 'ko', postFetchTranslateBatchSize) : 0;
         const backlog = await getMissingTranslationCount(env, 'ko');
-        return new Response(JSON.stringify({ newArticles: n, translated, backlog }), { headers });
+        return new Response(JSON.stringify({ newArticles: n.newArticles, queued: n.queued, backlog }), { headers });
       }
-      const t = await translateNew(env, 'ko', translateBatchSize);
+      const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       const backlog = await getMissingTranslationCount(env, 'ko');
-      return new Response(JSON.stringify({ translated: t, backlog }), { headers });
+      return new Response(JSON.stringify({ queued, backlog }), { headers });
     }
 
     // POST /api/retranslate?id=123 — delete existing ko translation and re-translate
@@ -360,13 +451,12 @@ export default {
           OR length(lc.summary) < 30
         ) LIMIT 10
       `).all();
-      let retried = 0;
+      const retryIds = [];
       for (const row of bad.results) {
         await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        try {
-          if (await translateArticle(env, row)) retried++;
-        } catch (e) { console.error(`retranslate-bad error for article ${row.id}:`, e.message); }
+        retryIds.push(row.id);
       }
+      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
       return new Response(JSON.stringify({ found: bad.results.length, retried }), { headers });
     }
 
