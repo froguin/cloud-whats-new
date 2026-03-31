@@ -188,7 +188,7 @@ export default {
       }
     } else {
       // translate new articles
-      const t = await translateNew(env, 'ko', 50);
+      const t = await translateNew(env, 'ko', 10);
       // Quality check: find bad translations and re-translate each specific article (max 5 per run)
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
@@ -249,7 +249,7 @@ export default {
 
     if (path === '/api/trigger' && request.method === 'POST') {
       const n = await fetchRSS(env);
-      const t = await translateNew(env, 'ko', 50);
+      const t = await translateNew(env, 'ko', 10);
       return new Response(JSON.stringify({ newArticles: n, translated: t }), { headers });
     }
 
