@@ -31,6 +31,7 @@ const FEW_SHOT = [
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
 const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
+let translationJobStateReady = false;
 
 const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
@@ -61,6 +62,47 @@ const TRANSLATION_JSON_SCHEMA = {
     required: ['title', 'summary', 'target', 'features', 'regions', 'status'],
   },
 };
+
+const QUALITY_REVIEW_JSON_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      pass: { type: 'boolean' },
+      reasons: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      suggested_title: { type: 'string' },
+      suggested_summary: { type: 'string' },
+    },
+    required: ['pass', 'reasons', 'suggested_title', 'suggested_summary'],
+  },
+};
+
+const QUALITY_REVIEW_PROMPT = `You are a Korean editor reviewing cloud release-note cards before they are shown to users.
+
+GOAL:
+- Catch broken or awkward Korean cards that would look untrustworthy in production.
+- Focus on title completeness, natural Korean, and stray markdown or unfinished English fragments.
+
+FAIL if any of these are true:
+- The title looks truncated, incomplete, or cuts a product/service name.
+- The summary contains stray markdown/code tokens such as _workflow_, **, or backticks.
+- The summary reads like literal machine translation and would look awkward to Korean engineers.
+- The title is too vague, mirrors the English title too closely, or the summary mostly repeats the title.
+- The summary is not exactly two Korean sentences.
+
+EDITING RULES:
+- Keep product names, service names, versions, region codes, dates, and numbers unchanged.
+- Do not add new facts.
+- Remove status labels like Preview/GA from the title unless they are essential; status belongs elsewhere.
+- If a small copy edit can fix the card, provide suggested_title and/or suggested_summary.
+- suggested_summary must still be exactly two sentences.
+- If the card is already good, set pass=true and leave suggestions empty.
+
+Return JSON only.`;
 
 function decodeEntities(s) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
@@ -219,7 +261,6 @@ function assessTranslationQuality(record, row) {
   const features = normalizeShortList(record.features);
 
   if (!title || !summary) reasons.push('missing-core-fields');
-  if (title.length > 50) reasons.push('title-too-long');
   if (hasDanglingTitleFragment(title)) reasons.push('title-truncated');
   if (hasMarkdownArtifacts(title) || hasMarkdownArtifacts(summary)) reasons.push('markdown-artifact');
   if (title === row.title_en) reasons.push('title-not-translated');
@@ -235,17 +276,150 @@ function assessTranslationQuality(record, row) {
   };
 }
 
-async function enqueueTranslationJobs(env, jobs) {
+function applyQualitySuggestions(record, review) {
+  const next = { ...record };
+  const suggestedTitle = String(review?.suggested_title || '').trim();
+  const suggestedSummary = String(review?.suggested_summary || '').trim();
+
+  if (suggestedTitle) {
+    next.title = suggestedTitle
+      .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  if (suggestedSummary) {
+    next.summary = suggestedSummary.replace(/\s+/g, ' ').trim();
+  }
+
+  return next;
+}
+
+async function reviewTranslationQualityWithAI(env, row, record) {
+  const reviewInput = {
+    original_title: row.title_en,
+    original_description: String(row.description_en || '').slice(0, 1500),
+    translated_title: record.title,
+    translated_summary: record.summary,
+    translated_target: record.target,
+    translated_features: record.features,
+    translated_regions: record.regions,
+  };
+
+  try {
+    const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [
+        { role: 'system', content: QUALITY_REVIEW_PROMPT },
+        { role: 'user', content: JSON.stringify(reviewInput) },
+      ],
+      response_format: QUALITY_REVIEW_JSON_SCHEMA,
+      max_tokens: 384,
+      temperature: 0.1,
+    });
+    const parsed = parseAIResponse(aiResp);
+    if (!parsed || typeof parsed.pass !== 'boolean') {
+      return { pass: true, reasons: ['review-unavailable'], record };
+    }
+
+    const suggestedRecord = applyQualitySuggestions(record, parsed);
+    const suggestedQuality = assessTranslationQuality(suggestedRecord, row);
+    const hasSuggestion =
+      suggestedRecord.title !== record.title || suggestedRecord.summary !== record.summary;
+
+    if (!parsed.pass && hasSuggestion && suggestedQuality.pass) {
+      return {
+        pass: true,
+        reasons: [...(parsed.reasons || []), 'reviewer-applied-edit'],
+        record: suggestedRecord,
+      };
+    }
+
+    return {
+      pass: !!parsed.pass,
+      reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
+      record,
+    };
+  } catch (error) {
+    console.error('quality review error:', error.message);
+    return { pass: true, reasons: ['review-error'], record };
+  }
+}
+
+async function ensureTranslationJobStateTable(env) {
+  if (translationJobStateReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS translation_job_state (
+      article_id INTEGER NOT NULL,
+      lang TEXT NOT NULL,
+      reason TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (article_id, lang)
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE INDEX IF NOT EXISTS idx_translation_job_state_updated_at
+    ON translation_job_state(updated_at)
+  `).run();
+  translationJobStateReady = true;
+}
+
+async function claimTranslationJobs(env, jobs) {
+  await ensureTranslationJobStateTable(env);
+  const claimed = [];
+  for (const job of jobs) {
+    const alreadyLocalized = await hasLocalizedContent(env, job.articleId, job.lang);
+    if (alreadyLocalized) continue;
+
+    const result = await env.DB.prepare(`
+      INSERT OR IGNORE INTO translation_job_state (article_id, lang, reason, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `).bind(job.articleId, job.lang, job.reason || 'backlog').run();
+
+    if (result.meta.changes > 0) {
+      claimed.push(job);
+    }
+  }
+  return claimed;
+}
+
+async function releaseTranslationJobs(env, jobs) {
+  await ensureTranslationJobStateTable(env);
+  for (const job of jobs) {
+    await env.DB.prepare(`
+      DELETE FROM translation_job_state
+      WHERE article_id = ? AND lang = ?
+    `).bind(job.articleId, job.lang).run();
+  }
+}
+
+async function touchTranslationJob(env, articleId, lang, reason) {
+  await ensureTranslationJobStateTable(env);
+  await env.DB.prepare(`
+    INSERT INTO translation_job_state (article_id, lang, reason, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(article_id, lang) DO UPDATE SET
+      reason = excluded.reason,
+      updated_at = datetime('now')
+  `).bind(articleId, lang, reason).run();
+}
+
+async function enqueueTranslationJobs(env, jobs, options = {}) {
   if (!env.TRANSLATION_QUEUE || !jobs.length) return 0;
+  const skipClaim = !!options.skipClaim;
+  const candidateJobs = skipClaim ? jobs : await claimTranslationJobs(env, jobs);
   let queued = 0;
   try {
-    for (let i = 0; i < jobs.length; i += 100) {
-      const batch = jobs.slice(i, i + 100).map((job) => ({ body: job }));
+    for (let i = 0; i < candidateJobs.length; i += 100) {
+      const chunk = candidateJobs.slice(i, i + 100);
+      const batch = chunk.map((job) => ({ body: job }));
       await env.TRANSLATION_QUEUE.sendBatch(batch);
       queued += batch.length;
     }
   } catch (e) {
+    if (!skipClaim) {
+      await releaseTranslationJobs(env, candidateJobs);
+    }
     console.error(`Failed to enqueue translation jobs: ${e.message}`);
+    throw e;
   }
   return queued;
 }
@@ -292,7 +466,6 @@ async function translateArticle(env, row, options = {}) {
   let cleanTitle = parsed.title
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
-  cleanTitle = cleanTitle.slice(0, 50).trim();
   const feat = normalizeShortList(parsed.features).join(', ');
   const reg = normalizeShortList(parsed.regions, 10).join(', ') || '모든 리전';
   const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
@@ -314,11 +487,24 @@ async function translateArticle(env, row, options = {}) {
   if (!quality.pass && !allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons };
   }
+  let finalRecord = record;
+  let finalQuality = quality;
+  if (!allowLowQuality) {
+    const reviewed = await reviewTranslationQualityWithAI(env, row, record);
+    if (!reviewed.pass) {
+      return { ok: false, needsRetry: true, reasons: reviewed.reasons };
+    }
+    finalRecord = reviewed.record || record;
+    finalQuality = assessTranslationQuality(finalRecord, row);
+    if (!finalQuality.pass) {
+      return { ok: false, needsRetry: true, reasons: finalQuality.reasons };
+    }
+  }
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
-         record.target, record.features, record.regions, record.status, modelUsed).run();
-  return { ok: true, quality };
+  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, finalRecord.title, finalRecord.summary,
+         finalRecord.target, finalRecord.features, finalRecord.regions, finalRecord.status, modelUsed).run();
+  return { ok: true, quality: finalQuality };
 }
 
 async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit = 25) {
@@ -350,12 +536,17 @@ async function getMissingTranslationCount(env, lang = 'ko') {
 
 export default {
   async scheduled(event, env, ctx) {
+    await ensureTranslationJobStateTable(env);
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     if (FETCH_CRONS.has(event.cron)) {
       // quarter-hour fetch RSS + cleanup
       const n = await fetchRSS(env);
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
+      await env.DB.prepare(`
+        DELETE FROM translation_job_state
+        WHERE updated_at < datetime('now', '-2 hours')
+      `).run();
       const backlog = await getMissingTranslationCount(env, 'ko');
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
@@ -400,6 +591,7 @@ export default {
     }
   },
   async queue(batch, env, ctx) {
+    await ensureTranslationJobStateTable(env);
     for (const msg of batch.messages) {
       const articleId = msg.body?.articleId;
       const lang = msg.body?.lang || DEFAULT_QUEUE_LANG;
@@ -411,13 +603,16 @@ export default {
       }
 
       try {
+        await touchTranslationJob(env, articleId, lang, reason);
         if (await hasLocalizedContent(env, articleId, lang)) {
+          await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
           continue;
         }
 
         const row = await getArticleForTranslation(env, articleId);
         if (!row) {
+          await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
           continue;
         }
@@ -427,12 +622,14 @@ export default {
           allowLowQuality: reason === 'quality_retry' || reason === 'manual',
         });
         if (result?.ok) {
+          await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
           continue;
         }
 
         if (result?.needsRetry && reason !== 'quality_retry') {
-          await enqueueArticleTranslations(env, [articleId], lang, 'quality_retry');
+          await touchTranslationJob(env, articleId, lang, 'quality_retry');
+          await enqueueTranslationJobs(env, [{ articleId, lang, reason: 'quality_retry' }], { skipClaim: true });
           msg.ack();
           continue;
         }
@@ -445,6 +642,7 @@ export default {
     }
   },
   async fetch(request, env) {
+    await ensureTranslationJobStateTable(env);
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const url = new URL(request.url);
     const path = url.pathname;
