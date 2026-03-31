@@ -30,7 +30,7 @@ const FEW_SHOT = [
 
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
-const FETCH_CRONS = new Set(['0,15,30,45 * * * *', '0 * * * *']);
+const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
 
 const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
@@ -288,7 +288,7 @@ async function translateArticle(env, row, options = {}) {
     max_tokens: 768, temperature: 0.1,
   });
   const parsed = parseAIResponse(aiResp);
-  if (!parsed || !parsed.title) return false;
+  if (!parsed || !parsed.title) return { ok: false, needsRetry: false };
   let cleanTitle = parsed.title
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
@@ -319,26 +319,6 @@ async function translateArticle(env, row, options = {}) {
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
          record.target, record.features, record.regions, record.status, modelUsed).run();
   return { ok: true, quality };
-}
-
-async function translateNew(env, lang = 'ko', limit = 10) {
-  const rows = await env.DB.prepare(`
-    SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en
-    FROM articles a
-    WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)
-    ORDER BY a.created_at DESC LIMIT ?
-  `).bind(lang, limit).all();
-
-  let translated = 0;
-  for (const row of rows.results) {
-    try {
-      const result = await translateArticle(env, row, { allowLowQuality: true });
-      if (result?.ok) translated++;
-    } catch (e) {
-      console.error(`translate error for article ${row.id}:`, e.message);
-    }
-  }
-  return translated;
 }
 
 async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit = 25) {
