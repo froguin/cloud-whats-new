@@ -5,7 +5,7 @@ const API_BASE = 'https://api.whats-new.kr';
 
 const csps = [
   { id: 'aws', name: 'Amazon Web Services', color: '#FF9900', accent: '#232F3E', font: "'Amazon Ember', sans-serif" },
-  { id: 'gcp', name: 'Google Cloud', color: 'linear-gradient(to right, #4285F4 25%, #EA4335 25%, #EA4335 50%, #FBBC04 50%, #FBBC04 75%, #34A853 75%)', accent: '#4285F4', isGradient: true, font: "'Google Sans', sans-serif" },
+  { id: 'gcp', name: 'Google Cloud', color: 'linear-gradient(to right, #4285F4 25%, #EA4335 25%, #EA4335 50%, #FBBC04 50%, #FBBC04 75%, #34A853 75%)', accent: '#4285F4', isGradient: true, font: "'Google Sans', sans-serif", weight: 700 },
   { id: 'azure', name: 'Microsoft Azure', color: '#0078D4', accent: '#50E6FF', font: "'Segoe UI Web', 'Segoe UI', sans-serif" },
 ];
 
@@ -39,7 +39,7 @@ const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR'
     {csps.map(c => (
       <section>
         <div class="flex items-center justify-between mb-4 pb-2" style={c.isGradient ? `border-image: ${c.color} 1; border-bottom: 3px solid;` : `border-bottom: 3px solid ${c.color};`}>
-          <h2 class="text-base sm:text-lg font-bold" style={`color: var(--color-text-primary); font-family: ${c.font};`}>
+          <h2 class="text-base sm:text-lg font-bold" style={`color: var(--color-text-primary); font-family: ${c.font}; font-weight: ${c.weight || 700};`}>
             {c.name}
           </h2>
           <a href={`/${c.id}`} class="text-xs font-medium px-2 py-1 rounded" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
