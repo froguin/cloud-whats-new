@@ -12,6 +12,7 @@ RULES:
 - Write like a Korean tech blog, NOT machine translation
 - Output ONLY valid JSON, no markdown
 - NEVER change geographic names, dates, numbers, or region codes from the original
+- Prefer the official Korean region naming style used by each vendor's Korean documentation when writing titles, summaries, and regions
 - Title: 제품명은 절대 자르지 말 것. 간결한 헤드라인 형태로, 핵심 변화만 포함
 
 OUTPUT FORMAT (JSON):
@@ -20,12 +21,18 @@ OUTPUT FORMAT (JSON):
 const FEW_SHOT = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
   { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"함수 생성·업데이트 시 Python 3.13 런타임 선택 가능, 디버깅 시 더 명확한 오류 메시지 확인 가능, 런타임 수준의 성능 개선으로 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
+  { role: 'user', content: 'Title: Amazon Bedrock is now available in Asia Pacific (New Zealand)\nDescription: Amazon Bedrock is now available in the AWS Asia Pacific (New Zealand) Region.' },
+  { role: 'assistant', content: '{"title":"Amazon Bedrock, AWS 아시아 태평양(뉴질랜드) 리전에서 사용 가능","summary":"Amazon Bedrock를 AWS 아시아 태평양(뉴질랜드) 리전에서 바로 사용할 수 있게 되었습니다. 해당 리전에서 생성형 AI 서비스를 운영하거나 데이터 상주 요구사항을 맞춰야 하는 팀에게 선택지가 넓어집니다.","target":"AWS에서 생성형 AI 워크로드의 리전 배치를 검토하는 플랫폼 엔지니어","features":"뉴질랜드 리전에서 Bedrock 사용 가능, 리전 선택지 확대, 데이터 상주 대응 검토 가능","regions":"AWS 아시아 태평양(뉴질랜드) 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: Cloud Run now supports GPU acceleration (Preview)\nDescription: You can now attach NVIDIA L4 GPUs to your Cloud Run services for AI/ML inference workloads. GPU-enabled services are available in us-central1 and europe-west4.' },
   { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"별도 인프라 구성 없이 Cloud Run 서비스에 NVIDIA L4 GPU를 연결해 AI/ML 추론을 실행할 수 있게 되었습니다. 서버리스 환경에서 GPU 워크로드를 처리하려는 팀에게 인프라 관리 부담을 크게 줄여줍니다.","target":"Cloud Run에서 ML 모델 서빙을 검토 중인 ML 엔지니어","features":"컨테이너에 NVIDIA L4 GPU 직접 연결 가능, 서버리스 환경에서 AI 추론 파이프라인 구축 가능, 기존 Cloud Run 배포 워크플로 그대로 GPU 서비스 배포 가능","regions":"us-central1, europe-west4","status":["미리보기"]}' },
+  { role: 'user', content: 'Title: BigQuery now supports cross-region dataset replication in the US and EU multi-regions\nDescription: You can now configure managed disaster recovery for BigQuery datasets across the US and EU multi-regions.' },
+  { role: 'assistant', content: '{"title":"BigQuery에서 크로스 리전 데이터 세트 복제 지원","summary":"BigQuery 데이터 세트에 대해 us 및 eu 멀티 리전 간 관리형 재해 복구 구성을 적용할 수 있게 되었습니다. 멀티 리전 환경에서 분석 플랫폼의 복원력과 운영 연속성을 높이려는 팀에 유용합니다.","target":"BigQuery 기반 데이터 플랫폼의 재해 복구 전략을 설계하는 데이터 플랫폼 엔지니어","features":"멀티 리전 DR 구성 가능, 데이터 세트 복제 지원, 분석 복원력 강화","regions":"us 멀티 리전, eu 멀티 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed. Document AI: New OCR model available in Preview.' },
   { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 2건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 해당 리전 사용자는 Cloud Composer 3으로 전환이 필요합니다. 이 외에도 Compute Engine 보안 패치와 Document AI OCR 모델 프리뷰 등 업데이트가 포함되어 있습니다.","target":"australia-southeast2 리전에서 Cloud Composer 환경을 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Cloud Composer 2 신규 생성 중단으로 마이그레이션 필요, Compute Engine CVE-2026-23268 보안 취약점 패치 적용, Document AI에서 새로운 OCR 모델 프리뷰 사용 가능","regions":"australia-southeast2 (Cloud Composer), 모든 리전 (Compute Engine, Document AI)","status":["정식 출시","미리보기"]}' },
   { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions. Generally available.' },
   { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
+  { role: 'user', content: 'Title: Azure DNS is now generally available in all public Azure regions\nDescription: Azure DNS is now generally available in all public Azure regions.' },
+  { role: 'assistant', content: '{"title":"Azure DNS, 모든 Azure 퍼블릭 리전에서 사용 가능","summary":"Azure DNS를 모든 Azure 퍼블릭 리전에서 사용할 수 있게 되었습니다. 여러 지역에 걸쳐 공용 DNS 구성을 표준화하려는 팀은 동일한 운영 모델을 더 넓게 적용할 수 있습니다.","target":"여러 Azure 지역에 걸쳐 네트워크와 DNS 구성을 운영하는 클라우드 네트워크 엔지니어","features":"전 지역 사용 가능, DNS 운영 표준화, 멀티리전 확장 용이","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
 const DEFAULT_QUEUE_LANG = 'ko';
@@ -34,45 +41,76 @@ const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
 let translationJobStateReady = false;
 
 const REGION_DISPLAY_MAP = {
-  'Asia Pacific (New Zealand)': '뉴질랜드 리전',
-  'Asia Pacific (Tokyo)': '도쿄 리전',
-  'Asia Pacific (Seoul)': '서울 리전',
-  'Asia Pacific (Osaka)': '오사카 리전',
-  'Asia Pacific (Sydney)': '시드니 리전',
-  'Asia Pacific (Melbourne)': '멜버른 리전',
-  'Asia Pacific (Jakarta)': '자카르타 리전',
-  'Asia Pacific (Mumbai)': '뭄바이 리전',
-  'Asia Pacific (Hong Kong)': '홍콩 리전',
-  'Asia Pacific (Singapore)': '싱가포르 리전',
-  'Europe (Ireland)': '아일랜드 리전',
-  'Europe (London)': '런던 리전',
-  'Europe (Frankfurt)': '프랑크푸르트 리전',
-  'Europe (Paris)': '파리 리전',
-  'Europe (Stockholm)': '스톡홀름 리전',
-  'Europe (Zurich)': '취리히 리전',
-  'US East (N. Virginia)': '미국 동부(버지니아 북부) 리전',
-  'US East (Ohio)': '미국 동부(오하이오) 리전',
-  'US West (Oregon)': '미국 서부(오리건) 리전',
-  'US West (N. California)': '미국 서부(캘리포니아 북부) 리전',
-  'South America (Sao Paulo)': '남아메리카(상파울루) 리전',
-  'Middle East (UAE)': '중동(UAE) 리전',
-  'Middle East (Bahrain)': '중동(바레인) 리전',
-  'Africa (Cape Town)': '아프리카(케이프타운) 리전',
-  'Canada (Central)': '캐나다 중부 리전',
+  'Asia Pacific (New Zealand)': 'AWS 아시아 태평양(뉴질랜드) 리전',
+  'Asia Pacific (Tokyo)': 'AWS 아시아 태평양(도쿄) 리전',
+  'Asia Pacific (Seoul)': 'AWS 아시아 태평양(서울) 리전',
+  'Asia Pacific (Osaka)': 'AWS 아시아 태평양(오사카) 리전',
+  'Asia Pacific (Sydney)': 'AWS 아시아 태평양(시드니) 리전',
+  'Asia Pacific (Melbourne)': 'AWS 아시아 태평양(멜버른) 리전',
+  'Asia Pacific (Jakarta)': 'AWS 아시아 태평양(자카르타) 리전',
+  'Asia Pacific (Mumbai)': 'AWS 아시아 태평양(뭄바이) 리전',
+  'Asia Pacific (Hong Kong)': 'AWS 아시아 태평양(홍콩) 리전',
+  'Asia Pacific (Singapore)': 'AWS 아시아 태평양(싱가포르) 리전',
+  'Europe (Ireland)': 'AWS 유럽(아일랜드) 리전',
+  'Europe (London)': 'AWS 유럽(런던) 리전',
+  'Europe (Frankfurt)': 'AWS 유럽(프랑크푸르트) 리전',
+  'Europe (Paris)': 'AWS 유럽(파리) 리전',
+  'Europe (Stockholm)': 'AWS 유럽(스톡홀름) 리전',
+  'Europe (Zurich)': 'AWS 유럽(취리히) 리전',
+  'US East (N. Virginia)': 'AWS 미국 동부(버지니아 북부) 리전',
+  'US East (Ohio)': 'AWS 미국 동부(오하이오) 리전',
+  'US West (Oregon)': 'AWS 미국 서부(오리건) 리전',
+  'US West (N. California)': 'AWS 미국 서부(캘리포니아 북부) 리전',
+  'South America (Sao Paulo)': 'AWS 남아메리카(상파울루) 리전',
+  'Middle East (UAE)': 'AWS 중동(UAE) 리전',
+  'Middle East (Bahrain)': 'AWS 중동(바레인) 리전',
+  'Africa (Cape Town)': 'AWS 아프리카(케이프타운) 리전',
+  'Canada (Central)': 'AWS 캐나다(중부) 리전',
+  'New Zealand North': '뉴질랜드 북부',
+  'Korea Central': '한국 중부',
+  'Korea South': '한국 남부',
+  'Japan East': '일본 동부',
+  'Japan West': '일본 서부',
+  'Australia East': '오스트레일리아 동부',
+  'Australia Southeast': '오스트레일리아 남동부',
+  'Denmark East': '덴마크 동부',
+  'Denmark West': '덴마크 서부',
+  'East US': '미국 동부',
+  'East US 2': '미국 동부 2',
+  'West US': '미국 서부',
+  'West US 2': '미국 서부 2',
+  'West US 3': '미국 서부 3',
+  'North Europe': '북유럽',
+  'West Europe': '서유럽',
 };
 
 const VENDOR_REGION_GUIDE = {
   aws: [
-    'AWS marketing region names should be translated naturally in Korean titles, for example Asia Pacific (New Zealand) -> 뉴질랜드 리전 and US East (Ohio) -> 미국 동부(오하이오) 리전.',
+    'For AWS, prefer the Korean naming style used on AWS Korea pages, for example Asia Pacific (New Zealand) -> AWS 아시아 태평양(뉴질랜드) 리전 and US East (Ohio) -> AWS 미국 동부(오하이오) 리전.',
     'If the source says all AWS Regions, output regions as 모든 AWS 리전.',
   ],
   gcp: [
-    'For Google Cloud, use natural Korean region labels in titles. Do not invent abbreviations such as APNZ.',
-    'If the source says all regions or does not specify a region, output regions as 모든 리전.',
+    'For Google Cloud, keep region codes unchanged when they are explicit, and write multi-region labels in Korean as us 멀티 리전 or eu 멀티 리전.',
+    'If the source says all regions or does not specify a region, output regions as 모든 리전. Do not invent abbreviations such as APNZ.',
   ],
   azure: [
-    'For Azure, keep official region names but write them naturally in Korean titles, for example Denmark East -> Denmark East 리전.',
+    'For Azure, prefer the official Korean display names used on Microsoft Learn, for example New Zealand North -> 뉴질랜드 북부 and Korea South -> 한국 남부.',
     'If the source says all public Azure regions, output regions as 모든 Azure 퍼블릭 리전.',
+  ],
+};
+
+const VENDOR_REGION_EXAMPLES = {
+  aws: [
+    'EXAMPLE: Source mentions "Asia Pacific (New Zealand)" -> title can use "AWS 아시아 태평양(뉴질랜드) 리전에서 사용 가능", regions should be "AWS 아시아 태평양(뉴질랜드) 리전".',
+    'EXAMPLE: Source mentions "all AWS Regions" -> regions should be "모든 AWS 리전".',
+  ],
+  gcp: [
+    'EXAMPLE: Source mentions "US and EU multi-regions" -> regions should be "us 멀티 리전, eu 멀티 리전".',
+    'EXAMPLE: Source mentions "available in all regions" -> regions should be "모든 리전".',
+  ],
+  azure: [
+    'EXAMPLE: Source mentions "New Zealand North" -> use the Korean display name "뉴질랜드 북부".',
+    'EXAMPLE: Source mentions "all public Azure regions" -> regions should be "모든 Azure 퍼블릭 리전".',
   ],
 };
 
@@ -129,6 +167,7 @@ const QUALITY_REVIEW_PROMPT = `You are a Korean editor reviewing cloud release-n
 GOAL:
 - Catch broken or awkward Korean cards that would look untrustworthy in production.
 - Focus on title completeness, natural Korean, and stray markdown or unfinished English fragments.
+- Prefer the official Korean region naming style used by each vendor's Korean documentation.
 
 FAIL if any of these are true:
 - The title looks truncated, incomplete, or cuts a product/service name.
@@ -136,6 +175,7 @@ FAIL if any of these are true:
 - The summary reads like literal machine translation and would look awkward to Korean engineers.
 - The title is too vague, mirrors the English title too closely, or the summary mostly repeats the title.
 - The summary is not exactly two Korean sentences.
+- The regions field uses made-up shorthand or mixes inconsistent region naming styles.
 
 EDITING RULES:
 - Keep product names, service names, versions, region codes, dates, and numbers unchanged.
@@ -311,6 +351,13 @@ function buildVendorPromptHints(row) {
   for (const hint of (VENDOR_REGION_GUIDE[row.csp] || [])) {
     lines.push(`- ${hint}`);
   }
+  const examples = VENDOR_REGION_EXAMPLES[row.csp] || [];
+  if (examples.length) {
+    lines.push('REGION STYLE EXAMPLES:');
+    for (const example of examples) {
+      lines.push(`- ${example}`);
+    }
+  }
   const source = `${row.title_en || ''} ${(row.description_en || '').slice(0, 800)}`;
   const matched = Object.entries(REGION_DISPLAY_MAP)
     .filter(([name]) => source.includes(name))
@@ -394,6 +441,7 @@ function applyQualitySuggestions(record, review) {
 
 async function reviewTranslationQualityWithAI(env, row, record) {
   const reviewInput = {
+    region_guidance: buildVendorPromptHints(row),
     original_title: row.title_en,
     original_description: String(row.description_en || '').slice(0, 1500),
     translated_title: record.title,
