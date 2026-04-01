@@ -12,7 +12,7 @@ RULES:
 - Translate ALL other English into Korean. Never mix English words into Korean sentences (e.g. write "및" not "and 및")
 - Write natural Korean like a tech blog
 - Title: product name + key change only. Never truncate product names
-- Summary: exactly 2 sentences. First: what changed. Second: why it matters. Never repeat the title
+- Summary: exactly 2 sentences. First: what changed. Second: why it matters. Start with impact words like 이번 업데이트로, 새로운, 사용자는, 이 서비스는. Do not restate the title
 - Features: 3 items, describe capabilities not product names
 - Status labels ([Launched] etc.) go to status field only, not title. Determine status from description content: "preview"/"미리보기" → 미리보기, "beta"/"베타" → 베타, "retired"/"deprecated" → 지원 종료, "generally available"/"GA"/"launched" → 정식 출시
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
@@ -701,9 +701,11 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
+const RETRY_MODEL = '@cf/openai/gpt-oss-20b';
+
 function getTranslationExecutionOptions(reason = 'backlog') {
   if (reason === 'quality_retry') {
-    return { modelUsed: 'retried', allowLowQuality: true };
+    return { modelUsed: 'cf-gpt-oss-20b', allowLowQuality: true, model: RETRY_MODEL };
   }
   if (reason === 'manual') {
     return { modelUsed: 'manual', allowLowQuality: false };
@@ -711,13 +713,13 @@ function getTranslationExecutionOptions(reason = 'backlog') {
   return { modelUsed: 'cf-llama-3.1-8b', allowLowQuality: false };
 }
 
-async function buildTranslationRecord(env, row, hint = '') {
+async function buildTranslationRecord(env, row, hint = '', model = '@cf/meta/llama-3.1-8b-instruct') {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
   const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
   const sysPrompt = hint ? `${SYSTEM_PROMPT}\n\n=== 용어 사전 ===\n${hint}` : SYSTEM_PROMPT;
-  const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+  const aiResp = await env.AI.run(model, {
     messages: [{ role: 'system', content: sysPrompt }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
     max_tokens: 768, temperature: 0.1,
@@ -767,13 +769,13 @@ async function persistTranslationRecord(env, row, record, modelUsed) {
 
 async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   const options = getTranslationExecutionOptions(reason);
-  const record = await buildTranslationRecord(env, row, hint);
+  const record = await buildTranslationRecord(env, row, hint, options.model);
   if (!record) {
     return { ok: false, needsRetry: false };
   }
   const validated = await validateTranslationRecord(env, row, record, options);
   if (!validated.ok) {
-    return validated;
+    return { ...validated, reasons: validated.reasons };
   }
   await persistTranslationRecord(env, row, validated.record, options.modelUsed);
   return { ok: true, quality: validated.quality };
@@ -907,8 +909,17 @@ export default {
         }
 
         if (result?.needsRetry && reason !== 'quality_retry') {
+          const qualityHint = (result.reasons || []).map(r => {
+            if (r === 'summary-repeats-title') return '요약 첫 문장이 제목과 달라야 함';
+            if (r === 'title-not-translated') return '제목을 한국어로 번역해야 함';
+            if (r === 'title-truncated') return '제목이 잘리지 않게 완성해야 함';
+            if (r === 'markdown-artifact') return '마크다운(** ` 등) 제거';
+            if (r === 'summary-not-two-sentences') return '요약은 정확히 2문장';
+            if (r === 'target-too-generic') return '대상을 구체적으로 작성';
+            return r;
+          }).join('. ');
           await touchTranslationJob(env, articleId, lang, 'quality_retry');
-          await enqueueTranslationJobs(env, [{ articleId, lang, reason: 'quality_retry' }], { skipClaim: true });
+          await enqueueTranslationJobs(env, [{ articleId, lang, reason: 'quality_retry', hint: qualityHint }], { skipClaim: true });
           msg.ack();
           continue;
         }
