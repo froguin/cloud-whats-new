@@ -449,9 +449,17 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
-async function translateArticle(env, row, options = {}) {
-  const modelUsed = options.modelUsed || 'cf-llama-3.1-8b';
-  const allowLowQuality = !!options.allowLowQuality;
+function getTranslationExecutionOptions(reason = 'backlog') {
+  if (reason === 'quality_retry') {
+    return { modelUsed: 'retried', allowLowQuality: true };
+  }
+  if (reason === 'manual') {
+    return { modelUsed: 'manual', allowLowQuality: false };
+  }
+  return { modelUsed: 'cf-llama-3.1-8b', allowLowQuality: false };
+}
+
+async function buildTranslationRecord(env, row) {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
@@ -462,7 +470,7 @@ async function translateArticle(env, row, options = {}) {
     max_tokens: 768, temperature: 0.1,
   });
   const parsed = parseAIResponse(aiResp);
-  if (!parsed || !parsed.title) return { ok: false, needsRetry: false };
+  if (!parsed || !parsed.title) return null;
   let cleanTitle = parsed.title
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
@@ -483,28 +491,59 @@ async function translateArticle(env, row, options = {}) {
     regions: reg,
     status: stat,
   };
+  return record;
+}
+
+async function validateTranslationRecord(env, row, record, options = {}) {
+  const allowLowQuality = !!options.allowLowQuality;
   const quality = assessTranslationQuality(record, row);
   if (!quality.pass && !allowLowQuality) {
-    return { ok: false, needsRetry: true, reasons: quality.reasons };
+    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record };
   }
   let finalRecord = record;
   let finalQuality = quality;
   if (!allowLowQuality) {
     const reviewed = await reviewTranslationQualityWithAI(env, row, record);
     if (!reviewed.pass) {
-      return { ok: false, needsRetry: true, reasons: reviewed.reasons };
+      return { ok: false, needsRetry: true, reasons: reviewed.reasons, quality, record };
     }
     finalRecord = reviewed.record || record;
     finalQuality = assessTranslationQuality(finalRecord, row);
     if (!finalQuality.pass) {
-      return { ok: false, needsRetry: true, reasons: finalQuality.reasons };
+      return { ok: false, needsRetry: true, reasons: finalQuality.reasons, quality: finalQuality, record: finalRecord };
     }
   }
+  return { ok: true, quality: finalQuality, record: finalRecord };
+}
+
+async function persistTranslationRecord(env, row, record, modelUsed) {
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, finalRecord.title, finalRecord.summary,
-         finalRecord.target, finalRecord.features, finalRecord.regions, finalRecord.status, modelUsed).run();
-  return { ok: true, quality: finalQuality };
+  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
+         record.target, record.features, record.regions, record.status, modelUsed).run();
+}
+
+async function runTranslationPipeline(env, row, reason = 'backlog') {
+  const options = getTranslationExecutionOptions(reason);
+  const record = await buildTranslationRecord(env, row);
+  if (!record) {
+    return { ok: false, needsRetry: false };
+  }
+  const validated = await validateTranslationRecord(env, row, record, options);
+  if (!validated.ok) {
+    return validated;
+  }
+  await persistTranslationRecord(env, row, validated.record, options.modelUsed);
+  return { ok: true, quality: validated.quality };
+}
+
+async function queueArticleRetranslation(env, articleId, lang = DEFAULT_QUEUE_LANG, reason = 'manual') {
+  const row = await getArticleForTranslation(env, articleId);
+  if (!row) return { found: false, queued: 0 };
+  await releaseTranslationJobs(env, [{ articleId, lang }]);
+  await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(articleId, lang).run();
+  const queued = await enqueueTranslationJobs(env, [{ articleId, lang, reason }]);
+  return { found: true, queued };
 }
 
 async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit = 25) {
@@ -617,10 +656,7 @@ export default {
           continue;
         }
 
-        const result = await translateArticle(env, row, {
-          modelUsed: reason === 'quality_retry' ? 'retried' : 'cf-llama-3.1-8b',
-          allowLowQuality: reason === 'quality_retry' || reason === 'manual',
-        });
+        const result = await runTranslationPipeline(env, row, reason);
         if (result?.ok) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
@@ -686,21 +722,16 @@ export default {
       return new Response(JSON.stringify({ queued, backlog }), { headers });
     }
 
-    // POST /api/retranslate?id=123 — delete existing ko translation and re-translate
+    // POST /api/retranslate?id=123 — delete existing ko translation and enqueue retranslation
     if (path === '/api/retranslate' && request.method === 'POST') {
       const id = url.searchParams.get('id');
       if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
-      await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).run();
-      const row = await env.DB.prepare('SELECT id, csp, url, pub_date, title_en, description_en FROM articles WHERE id = ?').bind(id).first();
-      if (!row) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
       try {
-        const translation = await translateArticle(env, row, { modelUsed: 'manual', allowLowQuality: true });
-        if (translation?.ok) {
-          const saved = await env.DB.prepare("SELECT title FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(id).first();
-          return new Response(JSON.stringify({ retranslated: 1, title: saved?.title }), { headers });
-        }
+        const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual');
+        if (!result.found) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
+        return new Response(JSON.stringify({ queued: result.queued, articleId: Number(id), reason: 'manual' }), { headers });
       } catch (e) { console.error(e); }
-      return new Response(JSON.stringify({ retranslated: 0, error: 'translation failed' }), { headers });
+      return new Response(JSON.stringify({ queued: 0, error: 'translation failed' }), { headers });
     }
 
     // POST /api/retranslate-bad — bulk retranslate poor quality translations
