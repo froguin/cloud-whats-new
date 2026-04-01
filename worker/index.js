@@ -453,6 +453,56 @@ function hasDanglingTitleFragment(title) {
     || hasUnbalancedBrackets(value);
 }
 
+
+// Deterministic post-processing: fix common LLM issues without another AI call
+function applyDeterministicFixes(record, row) {
+  let { title, summary, target, features, regions, status } = record;
+  const entities = extractEntities(row.title_en, (row.description_en || '').slice(0, 800));
+
+  // Fix 1: Strip markdown artifacts
+  const stripMd = (s) => s.replace(/[*#`_~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+  title = stripMd(title);
+  summary = stripMd(summary);
+
+  // Fix 2: Entity preservation check — if product name truncated, use original
+  for (const product of entities.products) {
+    // Check if product name appears truncated in title
+    const words = product.split(/\s+/);
+    if (words.length >= 2) {
+      const partial = words.slice(0, -1).join(' ');
+      if (title.includes(partial) && !title.includes(product)) {
+        title = title.replace(partial, product);
+      }
+    }
+  }
+
+  // Fix 3: Summary repeats title — remove first sentence if it's too similar
+  const titleNorm = title.replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+  const summaryFirst = summary.split(/[.。!]/)[0] || '';
+  const summaryFirstNorm = summaryFirst.replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+  if (titleNorm && summaryFirstNorm && titleNorm.length > 10) {
+    // Jaccard similarity on character bigrams
+    const bigrams = (s) => { const b = new Set(); for (let i = 0; i < s.length - 1; i++) b.add(s.slice(i, i+2)); return b; };
+    const tb = bigrams(titleNorm), sb = bigrams(summaryFirstNorm);
+    const intersection = [...tb].filter(x => sb.has(x)).length;
+    const union = new Set([...tb, ...sb]).size;
+    if (union > 0 && intersection / union > 0.6) {
+      // Remove first sentence from summary
+      const rest = summary.slice(summaryFirst.length).replace(/^[.。!\s]+/, '').trim();
+      if (rest.length > 20) summary = rest;
+    }
+  }
+
+  // Fix 4: Features — strip product-name-only items
+  const featList = features.split(',').map(f => f.trim()).filter(f => {
+    // Keep if it contains a Korean verb/action word or is longer than just a product name
+    return f.length > 5 && !/^[A-Z][A-Za-z0-9\s\.\-]+$/.test(f);
+  });
+  if (featList.length >= 2) features = featList.slice(0, 3).join(', ');
+
+  return { title, summary, target, features, regions, status };
+}
+
 function assessTranslationQuality(record, row) {
   const reasons = [];
   const title = String(record.title || '').trim();
@@ -697,24 +747,13 @@ async function buildTranslationRecord(env, row) {
 
 async function validateTranslationRecord(env, row, record, options = {}) {
   const allowLowQuality = !!options.allowLowQuality;
-  const quality = assessTranslationQuality(record, row);
+  // Apply deterministic post-processing fixes
+  const fixed = applyDeterministicFixes(record, row);
+  const quality = assessTranslationQuality(fixed, row);
   if (!quality.pass && !allowLowQuality) {
-    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record };
+    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: fixed };
   }
-  let finalRecord = record;
-  let finalQuality = quality;
-  if (!allowLowQuality) {
-    const reviewed = await reviewTranslationQualityWithAI(env, row, record);
-    if (!reviewed.pass) {
-      return { ok: false, needsRetry: true, reasons: reviewed.reasons, quality, record };
-    }
-    finalRecord = reviewed.record || record;
-    finalQuality = assessTranslationQuality(finalRecord, row);
-    if (!finalQuality.pass) {
-      return { ok: false, needsRetry: true, reasons: finalQuality.reasons, quality: finalQuality, record: finalRecord };
-    }
-  }
-  return { ok: true, quality: finalQuality, record: finalRecord };
+  return { ok: true, quality, record: fixed };
 }
 
 async function persistTranslationRecord(env, row, record, modelUsed) {
