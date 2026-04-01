@@ -68,22 +68,47 @@ const latest = articles[0]?.pub_date ? new Date(articles[0].pub_date).toLocaleSt
 
 <script>
   // Auto-expand card when navigated via hash anchor
+  let activeCard = null;
   function expandTarget() {
     const hash = window.location.hash;
     if (!hash) return;
+    // Clear previous active card
+    if (activeCard) {
+      activeCard.classList.remove('card-active');
+      activeCard.style.outline = '';
+      activeCard.style.outlineOffset = '';
+      activeCard.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
+        el.style.webkitLineClamp = '';
+      });
+    }
     const card = document.querySelector(hash);
     if (!card) return;
+    activeCard = card;
+    // Expand clipped text
     card.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
       el.style.webkitLineClamp = 'unset';
     });
-    // GCP: match outline color to card's top accent color
+    // Apply hover-like active state
+    card.classList.add('card-active');
+    // Accent-colored outline (GCP 4-color match)
     const topBorder = card.style.borderTopColor || getComputedStyle(card).borderTopColor;
     const outlineColor = topBorder && topBorder !== 'rgba(0, 0, 0, 0)' ? topBorder : 'var(--color-primary)';
     card.style.outline = '3px solid ' + outlineColor;
     card.style.outlineOffset = '2px';
-    setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 3000);
     setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   }
+  // Click anywhere else to deactivate
+  document.addEventListener('click', (e) => {
+    if (activeCard && !activeCard.contains(e.target)) {
+      activeCard.classList.remove('card-active');
+      activeCard.style.outline = '';
+      activeCard.style.outlineOffset = '';
+      activeCard.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
+        el.style.webkitLineClamp = '';
+      });
+      activeCard = null;
+    }
+  });
   expandTarget();
   window.addEventListener('hashchange', expandTarget);
 </script>
