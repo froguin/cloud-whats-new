@@ -26,7 +26,7 @@ const FEW_SHOT = [
   { role: 'user', content: 'Title: Cloud Run now supports GPU acceleration (Preview)\nDescription: You can now attach NVIDIA L4 GPUs to your Cloud Run services for AI/ML inference workloads. GPU-enabled services are available in us-central1 and europe-west4.' },
   { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"별도 인프라 구성 없이 Cloud Run 서비스에 NVIDIA L4 GPU를 연결해 AI/ML 추론을 실행할 수 있게 되었습니다. 서버리스 환경에서 GPU 워크로드를 처리하려는 팀에게 인프라 관리 부담을 크게 줄여줍니다.","target":"Cloud Run에서 ML 모델 서빙을 검토 중인 ML 엔지니어","features":"컨테이너에 NVIDIA L4 GPU 직접 연결 가능, 서버리스 환경에서 AI 추론 파이프라인 구축 가능, 기존 Cloud Run 배포 워크플로 그대로 GPU 서비스 배포 가능","regions":"us-central1, europe-west4","status":["미리보기"]}' },
   { role: 'user', content: 'Title: BigQuery now supports cross-region dataset replication in the US and EU multi-regions\nDescription: You can now configure managed disaster recovery for BigQuery datasets across the US and EU multi-regions.' },
-  { role: 'assistant', content: '{"title":"BigQuery에서 크로스 리전 데이터 세트 복제 지원","summary":"BigQuery 데이터 세트에 대해 us 및 eu 멀티 리전 간 관리형 재해 복구 구성을 적용할 수 있게 되었습니다. 멀티 리전 환경에서 분석 플랫폼의 복원력과 운영 연속성을 높이려는 팀에 유용합니다.","target":"BigQuery 기반 데이터 플랫폼의 재해 복구 전략을 설계하는 데이터 플랫폼 엔지니어","features":"멀티 리전 DR 구성 가능, 데이터 세트 복제 지원, 분석 복원력 강화","regions":"us 멀티 리전, eu 멀티 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"BigQuery에서 크로스 리전 데이터 세트 복제 지원","summary":"BigQuery 데이터 세트에 대해 US 및 EU 멀티 리전 간 관리형 재해 복구 구성을 적용할 수 있게 되었습니다. 멀티 리전 환경에서 분석 플랫폼의 복원력과 운영 연속성을 높이려는 팀에 유용합니다.","target":"BigQuery 기반 데이터 플랫폼의 재해 복구 전략을 설계하는 데이터 플랫폼 엔지니어","features":"멀티 리전 DR 구성 가능, 데이터 세트 복제 지원, 분석 복원력 강화","regions":"US 멀티 리전, EU 멀티 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed. Document AI: New OCR model available in Preview.' },
   { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 2건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 해당 리전 사용자는 Cloud Composer 3으로 전환이 필요합니다. 이 외에도 Compute Engine 보안 패치와 Document AI OCR 모델 프리뷰 등 업데이트가 포함되어 있습니다.","target":"australia-southeast2 리전에서 Cloud Composer 환경을 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Cloud Composer 2 신규 생성 중단으로 마이그레이션 필요, Compute Engine CVE-2026-23268 보안 취약점 패치 적용, Document AI에서 새로운 OCR 모델 프리뷰 사용 가능","regions":"australia-southeast2 (Cloud Composer), 모든 리전 (Compute Engine, Document AI)","status":["정식 출시","미리보기"]}' },
   { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions. Generally available.' },
@@ -74,8 +74,8 @@ const REGION_DISPLAY_MAP = {
     'asia-southeast1': '싱가포르 리전',
     'australia-southeast1': '시드니 리전',
     'australia-southeast2': '멜버른 리전',
-    'us': 'us 멀티 리전',
-    'eu': 'eu 멀티 리전',
+    'us': 'US 멀티 리전',
+    'eu': 'EU 멀티 리전',
   },
   azure: {
     'New Zealand North': '뉴질랜드 북부',
@@ -105,7 +105,7 @@ const VENDOR_REGION_GUIDE = {
   gcp: [
     'For Google Cloud, prefer natural Korean region names such as asia-northeast3 -> 서울 리전 and asia-northeast1 -> 도쿄 리전.',
     'If a region code appears in the source, you may mention the Korean region name in title/summary and should avoid awkward raw-code-only phrasing in user-facing copy.',
-    'Use rough geographic labels only when the source itself uses multi-region labels such as us or eu, and write them as us 멀티 리전 or eu 멀티 리전.',
+    'Use rough geographic labels only when the source itself uses multi-region labels such as us or eu, and write them as US 멀티 리전 or EU 멀티 리전.',
     'If the source says all regions or does not specify a region, output regions as 모든 리전. Do not invent abbreviations such as APNZ.',
   ],
   azure: [
@@ -125,7 +125,7 @@ const VENDOR_REGION_EXAMPLES = {
     'EXAMPLE: Source mentions "asia-northeast1" -> use "도쿄 리전".',
     'EXAMPLE: Source mentions "asia-southeast1" -> use "싱가포르 리전".',
     'EXAMPLE: Source mentions "australia-southeast1" -> use "시드니 리전".',
-    'EXAMPLE: Source mentions "US and EU multi-regions" -> regions should be "us 멀티 리전, eu 멀티 리전".',
+    'EXAMPLE: Source mentions "US and EU multi-regions" -> regions should be "US 멀티 리전, EU 멀티 리전".',
     'EXAMPLE: Source mentions "available in all regions" -> regions should be "모든 리전".',
   ],
   azure: [
