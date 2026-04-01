@@ -9,6 +9,7 @@ const SYSTEM_PROMPT = `You are a Korean cloud technology translator.
 RULES:
 - Output ONLY valid JSON, no markdown
 - Keep product names, region codes, versions, dates in English exactly as given
+- Translate ALL other English into Korean. Never mix English words into Korean sentences (e.g. write "및" not "and 및")
 - Write natural Korean like a tech blog
 - Title: product name + key change only. Never truncate product names
 - Summary: exactly 2 sentences. First: what changed. Second: why it matters. Never repeat the title
@@ -714,10 +715,10 @@ async function buildTranslationRecord(env, row, hint = '') {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
-  const hintLine = hint ? `\nHint: ${hint}` : '';
-  const userMsg = `${buildVendorPromptHints(row)}${hintLine}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const sysPrompt = hint ? `${SYSTEM_PROMPT}\n\n=== 용어 사전 ===\n${hint}` : SYSTEM_PROMPT;
   const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
+    messages: [{ role: 'system', content: sysPrompt }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
     max_tokens: 768, temperature: 0.1,
   });
