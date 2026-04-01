@@ -850,7 +850,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -861,6 +861,8 @@ export default {
           OR lc.summary LIKE '%_workflow_%'
           OR lc.summary LIKE '%**%'
           OR lc.summary LIKE '%\`%'
+          OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
+          OR lc.title LIKE '%and 및%'
         ) LIMIT 5
       `).all();
       const retryIds = [];
@@ -994,7 +996,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used != 'manual' AND lc.model_used != 'retried' AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -1005,7 +1007,9 @@ export default {
           OR lc.summary LIKE '%_workflow_%'
           OR lc.summary LIKE '%**%'
           OR lc.summary LIKE '%\`%'
-        ) LIMIT 10
+          OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
+          OR lc.title LIKE '%and 및%'
+        ) LIMIT 25
       `).all();
       const retryIds = [];
       for (const row of bad.results) {
