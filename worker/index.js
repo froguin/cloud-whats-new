@@ -41,56 +41,69 @@ const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
 let translationJobStateReady = false;
 
 const REGION_DISPLAY_MAP = {
-  'Asia Pacific (New Zealand)': 'AWS 아시아 태평양(뉴질랜드) 리전',
-  'Asia Pacific (Tokyo)': 'AWS 아시아 태평양(도쿄) 리전',
-  'Asia Pacific (Seoul)': 'AWS 아시아 태평양(서울) 리전',
-  'Asia Pacific (Osaka)': 'AWS 아시아 태평양(오사카) 리전',
-  'Asia Pacific (Sydney)': 'AWS 아시아 태평양(시드니) 리전',
-  'Asia Pacific (Melbourne)': 'AWS 아시아 태평양(멜버른) 리전',
-  'Asia Pacific (Jakarta)': 'AWS 아시아 태평양(자카르타) 리전',
-  'Asia Pacific (Mumbai)': 'AWS 아시아 태평양(뭄바이) 리전',
-  'Asia Pacific (Hong Kong)': 'AWS 아시아 태평양(홍콩) 리전',
-  'Asia Pacific (Singapore)': 'AWS 아시아 태평양(싱가포르) 리전',
-  'Europe (Ireland)': 'AWS 유럽(아일랜드) 리전',
-  'Europe (London)': 'AWS 유럽(런던) 리전',
-  'Europe (Frankfurt)': 'AWS 유럽(프랑크푸르트) 리전',
-  'Europe (Paris)': 'AWS 유럽(파리) 리전',
-  'Europe (Stockholm)': 'AWS 유럽(스톡홀름) 리전',
-  'Europe (Zurich)': 'AWS 유럽(취리히) 리전',
-  'US East (N. Virginia)': 'AWS 미국 동부(버지니아 북부) 리전',
-  'US East (Ohio)': 'AWS 미국 동부(오하이오) 리전',
-  'US West (Oregon)': 'AWS 미국 서부(오리건) 리전',
-  'US West (N. California)': 'AWS 미국 서부(캘리포니아 북부) 리전',
-  'South America (Sao Paulo)': 'AWS 남아메리카(상파울루) 리전',
-  'Middle East (UAE)': 'AWS 중동(UAE) 리전',
-  'Middle East (Bahrain)': 'AWS 중동(바레인) 리전',
-  'Africa (Cape Town)': 'AWS 아프리카(케이프타운) 리전',
-  'Canada (Central)': 'AWS 캐나다(중부) 리전',
-  'New Zealand North': '뉴질랜드 북부',
-  'Korea Central': '한국 중부',
-  'Korea South': '한국 남부',
-  'Japan East': '일본 동부',
-  'Japan West': '일본 서부',
-  'Australia East': '오스트레일리아 동부',
-  'Australia Southeast': '오스트레일리아 남동부',
-  'Denmark East': '덴마크 동부',
-  'Denmark West': '덴마크 서부',
-  'East US': '미국 동부',
-  'East US 2': '미국 동부 2',
-  'West US': '미국 서부',
-  'West US 2': '미국 서부 2',
-  'West US 3': '미국 서부 3',
-  'North Europe': '북유럽',
-  'West Europe': '서유럽',
+  aws: {
+    'Asia Pacific (New Zealand)': '아시아 태평양(뉴질랜드) 리전',
+    'Asia Pacific (Tokyo)': '아시아 태평양(도쿄) 리전',
+    'Asia Pacific (Seoul)': '아시아 태평양(서울) 리전',
+    'Asia Pacific (Osaka)': '아시아 태평양(오사카) 리전',
+    'Asia Pacific (Sydney)': '아시아 태평양(시드니) 리전',
+    'Asia Pacific (Melbourne)': '아시아 태평양(멜버른) 리전',
+    'Asia Pacific (Jakarta)': '아시아 태평양(자카르타) 리전',
+    'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이) 리전',
+    'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩) 리전',
+    'Asia Pacific (Singapore)': '아시아 태평양(싱가포르) 리전',
+    'Europe (Ireland)': '유럽(아일랜드) 리전',
+    'Europe (London)': '유럽(런던) 리전',
+    'Europe (Frankfurt)': '유럽(프랑크푸르트) 리전',
+    'Europe (Paris)': '유럽(파리) 리전',
+    'Europe (Stockholm)': '유럽(스톡홀름) 리전',
+    'Europe (Zurich)': '유럽(취리히) 리전',
+    'US East (N. Virginia)': '미국 동부(버지니아 북부) 리전',
+    'US East (Ohio)': '미국 동부(오하이오) 리전',
+    'US West (Oregon)': '미국 서부(오리건) 리전',
+    'US West (N. California)': '미국 서부(캘리포니아 북부) 리전',
+    'South America (Sao Paulo)': '남아메리카(상파울루) 리전',
+    'Middle East (UAE)': '중동(UAE) 리전',
+    'Middle East (Bahrain)': '중동(바레인) 리전',
+    'Africa (Cape Town)': '아프리카(케이프타운) 리전',
+    'Canada (Central)': '캐나다(중부) 리전',
+  },
+  gcp: {
+    'asia-northeast3': 'asia-northeast3',
+    'asia-northeast1': 'asia-northeast1',
+    'asia-southeast1': 'asia-southeast1',
+    'australia-southeast2': 'australia-southeast2',
+    'us': 'us 멀티 리전',
+    'eu': 'eu 멀티 리전',
+  },
+  azure: {
+    'New Zealand North': '뉴질랜드 북부',
+    'Korea Central': '한국 중부',
+    'Korea South': '한국 남부',
+    'Japan East': '일본 동부',
+    'Japan West': '일본 서부',
+    'Australia East': '오스트레일리아 동부',
+    'Australia Southeast': '오스트레일리아 남동부',
+    'Denmark East': '덴마크 동부',
+    'Denmark West': '덴마크 서부',
+    'East US': '미국 동부',
+    'East US 2': '미국 동부 2',
+    'West US': '미국 서부',
+    'West US 2': '미국 서부 2',
+    'West US 3': '미국 서부 3',
+    'North Europe': '북유럽',
+    'West Europe': '서유럽',
+  },
 };
 
 const VENDOR_REGION_GUIDE = {
   aws: [
-    'For AWS, prefer the Korean naming style used on AWS Korea pages, for example Asia Pacific (New Zealand) -> AWS 아시아 태평양(뉴질랜드) 리전 and US East (Ohio) -> AWS 미국 동부(오하이오) 리전.',
+    'For AWS, prefer the Korean naming style used on AWS Korea pages, for example Asia Pacific (New Zealand) -> 아시아 태평양(뉴질랜드) 리전 and US East (Ohio) -> 미국 동부(오하이오) 리전.',
     'If the source says all AWS Regions, output regions as 모든 AWS 리전.',
   ],
   gcp: [
-    'For Google Cloud, keep region codes unchanged when they are explicit, and write multi-region labels in Korean as us 멀티 리전 or eu 멀티 리전.',
+    'For Google Cloud, keep region codes unchanged when they are explicit, such as asia-northeast3 or europe-west2.',
+    'Use rough geographic labels only when the source itself uses multi-region labels such as us or eu, and write them as us 멀티 리전 or eu 멀티 리전.',
     'If the source says all regions or does not specify a region, output regions as 모든 리전. Do not invent abbreviations such as APNZ.',
   ],
   azure: [
@@ -101,15 +114,18 @@ const VENDOR_REGION_GUIDE = {
 
 const VENDOR_REGION_EXAMPLES = {
   aws: [
-    'EXAMPLE: Source mentions "Asia Pacific (New Zealand)" -> title can use "AWS 아시아 태평양(뉴질랜드) 리전에서 사용 가능", regions should be "AWS 아시아 태평양(뉴질랜드) 리전".',
+    'EXAMPLE: Source mentions "Asia Pacific (New Zealand)" -> title can use "아시아 태평양(뉴질랜드) 리전에서 사용 가능", regions should be "아시아 태평양(뉴질랜드) 리전".',
+    'EXAMPLE: Source mentions "Asia Pacific (Seoul)" -> use "아시아 태평양(서울) 리전", not "AWS 아시아 태평양(서울) 리전".',
     'EXAMPLE: Source mentions "all AWS Regions" -> regions should be "모든 AWS 리전".',
   ],
   gcp: [
+    'EXAMPLE: Source mentions "asia-northeast3" -> keep it as "asia-northeast3" rather than rewriting it to a city name.',
     'EXAMPLE: Source mentions "US and EU multi-regions" -> regions should be "us 멀티 리전, eu 멀티 리전".',
     'EXAMPLE: Source mentions "available in all regions" -> regions should be "모든 리전".',
   ],
   azure: [
     'EXAMPLE: Source mentions "New Zealand North" -> use the Korean display name "뉴질랜드 북부".',
+    'EXAMPLE: Source mentions "Korea Central and Korea South" -> regions should be "한국 중부, 한국 남부".',
     'EXAMPLE: Source mentions "all public Azure regions" -> regions should be "모든 Azure 퍼블릭 리전".',
   ],
 };
@@ -309,14 +325,15 @@ function normalizeShortList(value, maxItems = 3) {
     .slice(0, maxItems);
 }
 
-function mapRegionDisplayName(value) {
+function mapRegionDisplayName(value, csp) {
   const text = String(value || '').trim();
   if (!text) return '';
-  return REGION_DISPLAY_MAP[text] || text;
+  const vendorMap = REGION_DISPLAY_MAP[csp] || {};
+  return vendorMap[text] || text;
 }
 
 function normalizeRegionsField(value, csp) {
-  const items = normalizeShortList(value, 10).map(mapRegionDisplayName);
+  const items = normalizeShortList(value, 10).map(item => mapRegionDisplayName(item, csp));
   const joined = items.join(', ').trim();
   const lower = joined.toLowerCase();
 
@@ -335,7 +352,7 @@ function normalizeRegionsField(value, csp) {
   }
 
   return joined
-    .replace(/\bAPNZ\b/g, '뉴질랜드 리전')
+    .replace(/\bAPNZ\b/g, csp === 'aws' ? '아시아 태평양(뉴질랜드) 리전' : '뉴질랜드 리전')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -359,7 +376,7 @@ function buildVendorPromptHints(row) {
     }
   }
   const source = `${row.title_en || ''} ${(row.description_en || '').slice(0, 800)}`;
-  const matched = Object.entries(REGION_DISPLAY_MAP)
+  const matched = Object.entries(REGION_DISPLAY_MAP[row.csp] || {})
     .filter(([name]) => source.includes(name))
     .slice(0, 6);
   if (matched.length) {
