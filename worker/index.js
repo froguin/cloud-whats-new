@@ -4,35 +4,30 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const SYSTEM_PROMPT = `You are a Korean cloud technology translator. Translate cloud service updates to Korean JSON.
+const SYSTEM_PROMPT = `You are a Korean cloud technology translator.
 
 RULES:
-- Keep ALL product/service names in English (AWS Lambda, Google Cloud Run, Azure Functions, etc.)
-- Keep region codes in English (us-east-1, ap-northeast-2, etc.)
-- Write like a Korean tech blog, NOT machine translation
 - Output ONLY valid JSON, no markdown
-- NEVER change geographic names, dates, numbers, or region codes from the original
-- Prefer the official Korean region naming style used by each vendor's Korean documentation when writing titles, summaries, and regions
-- Title: 제품명은 절대 자르지 말 것. 간결한 헤드라인 형태로, 핵심 변화만 포함
+- Keep product names, region codes, versions, dates in English exactly as given
+- Write natural Korean like a tech blog
+- Title: product name + key change only. Never truncate product names
+- Summary: exactly 2 sentences. First: what changed. Second: why it matters. Never repeat the title
+- Features: 3 items, describe capabilities not product names
+- Status labels ([Launched] etc.) go to status field only, not title
+- GCP date entries: YYYY년 M월 D일: main product 외 N건
 
-OUTPUT FORMAT (JSON):
-{"title":"한국어로 자연스럽게 다듬기. 제품명 영문 유지. 제목만으로 무슨 변화인지 알 수 있어야 함 — 너무 짧거나 모호한 제목 금지. 제품명은 절대 자르거나 축약하지 말 것. 제품명+핵심 변화 한 가지만 간결하게. 설명이나 배경은 summary에 쓸 것. 예: Azure SQL 업데이트(X) → Azure SQL에서 코드 분석 규칙 설정 및 Fabric 연동 지원(O). 제목에 포함된 상태 표기([Launched] (Preview) 등)는 제거하고 status에만 반영. GCP 날짜형은 YYYY년 M월 D일: 핵심제품 외 N건","summary":"정확히 2문장. 첫 문장: 제목 절대 반복 금지 — 무엇이 가능해졌는지 곧바로 서술. 둘째 문장: 실무에서 왜 중요한지. GCP 다제품: 임팩트 큰 1-2개에 집중하고 나머지는 외 N개 서비스 업데이트 포함으로 마무리","target":"이 변경을 지금 검토해야 할 사람을 역할+구체적 맥락으로 1줄. 개발자/엔지니어 단독 사용 금지. 예: GKE에서 멀티테넌트 클러스터를 운영하는 플랫폼 엔지니어","features":"정확히 3개, 쉼표 구분. 각 항목 15자 이내로 짧게. 동사형 효과 중심. 제품명 나열 금지","regions":"원문에 명시된 리전 그대로. 없으면 모든 리전","status":["상태값만 배열로. 제품명 포함 금지. 유효값: 정식 출시, 미리보기, 베타, 지원 종료"]}`;
+The user message includes MUST KEEP ENTITIES — reproduce them exactly.`;
 
 const FEW_SHOT = [
+  // AWS: standard single-product update
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
-  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원 시작","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"함수 생성·업데이트 시 Python 3.13 런타임 선택 가능, 디버깅 시 더 명확한 오류 메시지 확인 가능, 런타임 수준의 성능 개선으로 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
-  { role: 'user', content: 'Title: Amazon Bedrock is now available in Asia Pacific (New Zealand)\nDescription: Amazon Bedrock is now available in the AWS Asia Pacific (New Zealand) Region.' },
-  { role: 'assistant', content: '{"title":"Amazon Bedrock, AWS 아시아 태평양(뉴질랜드) 리전에서 사용 가능","summary":"Amazon Bedrock를 AWS 아시아 태평양(뉴질랜드) 리전에서 바로 사용할 수 있게 되었습니다. 해당 리전에서 생성형 AI 서비스를 운영하거나 데이터 상주 요구사항을 맞춰야 하는 팀에게 선택지가 넓어집니다.","target":"AWS에서 생성형 AI 워크로드의 리전 배치를 검토하는 플랫폼 엔지니어","features":"뉴질랜드 리전에서 Bedrock 사용 가능, 리전 선택지 확대, 데이터 상주 대응 검토 가능","regions":"AWS 아시아 태평양(뉴질랜드) 리전","status":["정식 출시"]}' },
-  { role: 'user', content: 'Title: Cloud Run now supports GPU acceleration (Preview)\nDescription: You can now attach NVIDIA L4 GPUs to your Cloud Run services for AI/ML inference workloads. GPU-enabled services are available in us-central1 and europe-west4.' },
-  { role: 'assistant', content: '{"title":"Cloud Run에서 GPU 가속 지원 (Preview)","summary":"별도 인프라 구성 없이 Cloud Run 서비스에 NVIDIA L4 GPU를 연결해 AI/ML 추론을 실행할 수 있게 되었습니다. 서버리스 환경에서 GPU 워크로드를 처리하려는 팀에게 인프라 관리 부담을 크게 줄여줍니다.","target":"Cloud Run에서 ML 모델 서빙을 검토 중인 ML 엔지니어","features":"컨테이너에 NVIDIA L4 GPU 직접 연결 가능, 서버리스 환경에서 AI 추론 파이프라인 구축 가능, 기존 Cloud Run 배포 워크플로 그대로 GPU 서비스 배포 가능","regions":"us-central1, europe-west4","status":["미리보기"]}' },
-  { role: 'user', content: 'Title: BigQuery now supports cross-region dataset replication in the US and EU multi-regions\nDescription: You can now configure managed disaster recovery for BigQuery datasets across the US and EU multi-regions.' },
-  { role: 'assistant', content: '{"title":"BigQuery에서 크로스 리전 데이터 세트 복제 지원","summary":"BigQuery 데이터 세트에 대해 US 및 EU 멀티 리전 간 관리형 재해 복구 구성을 적용할 수 있게 되었습니다. 멀티 리전 환경에서 분석 플랫폼의 복원력과 운영 연속성을 높이려는 팀에 유용합니다.","target":"BigQuery 기반 데이터 플랫폼의 재해 복구 전략을 설계하는 데이터 플랫폼 엔지니어","features":"멀티 리전 DR 구성 가능, 데이터 세트 복제 지원, 분석 복원력 강화","regions":"US 멀티 리전, EU 멀티 리전","status":["정식 출시"]}' },
-  { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed. Document AI: New OCR model available in Preview.' },
-  { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 2건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 해당 리전 사용자는 Cloud Composer 3으로 전환이 필요합니다. 이 외에도 Compute Engine 보안 패치와 Document AI OCR 모델 프리뷰 등 업데이트가 포함되어 있습니다.","target":"australia-southeast2 리전에서 Cloud Composer 환경을 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Cloud Composer 2 신규 생성 중단으로 마이그레이션 필요, Compute Engine CVE-2026-23268 보안 취약점 패치 적용, Document AI에서 새로운 OCR 모델 프리뷰 사용 가능","regions":"australia-southeast2 (Cloud Composer), 모든 리전 (Compute Engine, Document AI)","status":["정식 출시","미리보기"]}' },
-  { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions. Generally available.' },
-  { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 한결 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아질 것으로 기대됩니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하며 업그레이드 주기를 관리하는 플랫폼 엔지니어","features":"사이드카 컨테이너를 Pod과 독립적으로 관리 가능, Pod 종료·재시작 흐름을 더 세밀하게 제어 가능, 새로운 스케줄링 규칙으로 노드 자원 배치 최적화 가능","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
-  { role: 'user', content: 'Title: Azure DNS is now generally available in all public Azure regions\nDescription: Azure DNS is now generally available in all public Azure regions.' },
-  { role: 'assistant', content: '{"title":"Azure DNS, 모든 Azure 퍼블릭 리전에서 사용 가능","summary":"Azure DNS를 모든 Azure 퍼블릭 리전에서 사용할 수 있게 되었습니다. 여러 지역에 걸쳐 공용 DNS 구성을 표준화하려는 팀은 동일한 운영 모델을 더 넓게 적용할 수 있습니다.","target":"여러 Azure 지역에 걸쳐 네트워크와 DNS 구성을 운영하는 클라우드 네트워크 엔지니어","features":"전 지역 사용 가능, DNS 운영 표준화, 멀티리전 확장 용이","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"Python 3.13 런타임 선택 가능, 오류 메시지 개선, 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
+  // GCP: multi-product date-based entry
+  { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
+  { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 1건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 Cloud Composer 3으로 전환이 필요합니다. Compute Engine에서는 CVE-2026-23268 보안 취약점이 패치되었습니다.","target":"australia-southeast2 리전에서 Cloud Composer를 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Composer 2 생성 중단, CVE-2026-23268 패치 적용, Composer 3 전환 필요","regions":"australia-southeast2, 모든 리전","status":["정식 출시"]}' },
+  // Azure: standard update
+  { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions.' },
+  { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아집니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하는 플랫폼 엔지니어","features":"사이드카 독립 관리 가능, Pod 종료 흐름 세밀 제어, 노드 자원 배치 최적화","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
 ];
 
 const DEFAULT_QUEUE_LANG = 'ko';
@@ -362,6 +357,35 @@ function normalizeRegionsField(value, csp) {
     .trim();
 }
 
+
+// Extract product names, versions, regions, dates from source text
+function extractEntities(title, description) {
+  const source = `${title} ${description}`;
+  const entities = { products: [], versions: [], regions: [], dates: [] };
+
+  // Product names: capitalized multi-word patterns (Amazon X, AWS X, Azure X, Google X, Cloud X)
+  const productPatterns = source.match(/(?:Amazon|AWS|Azure|Google|Cloud|Microsoft)[\s]+[A-Z][A-Za-z0-9\s\-\.]+(?=[,\.\s]|$)/g) || [];
+  entities.products = [...new Set(productPatterns.map(p => p.trim()))].slice(0, 5);
+
+  // Also grab standalone product names from title
+  const titleProducts = title.match(/[A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+)+/g) || [];
+  for (const tp of titleProducts) {
+    if (!entities.products.some(p => p.includes(tp))) entities.products.push(tp);
+  }
+  entities.products = entities.products.slice(0, 5);
+
+  // Versions: X.Y or X.Y.Z patterns
+  entities.versions = [...new Set((source.match(/\b\d+\.\d+(?:\.\d+)?\b/g) || []))].slice(0, 5);
+
+  // Region names: "Asia Pacific (X)", "US East (X)", etc.
+  entities.regions = [...new Set((source.match(/(?:Asia Pacific|US (?:East|West)|Europe|Canada|South America|Middle East|Africa|ap-|us-|eu-|ca-|sa-|me-|af-)[\w\s\(\)\-]*/g) || []).map(r => r.trim()))].slice(0, 5);
+
+  // Dates
+  entities.dates = [...new Set((source.match(/(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/g) || []))].slice(0, 3);
+
+  return entities;
+}
+
 function buildVendorPromptHints(row) {
   const lines = [
     'REGION WRITING RULES:',
@@ -389,6 +413,15 @@ function buildVendorPromptHints(row) {
     for (const [name, ko] of matched) {
       lines.push(`- ${name} => ${ko}`);
     }
+  }
+  // Entity pinning
+  const entities = extractEntities(row.title_en, (row.description_en || '').slice(0, 800));
+  if (entities.products.length) {
+    lines.push('MUST KEEP ENTITIES (reproduce exactly, never abbreviate or translate):');
+    for (const p of entities.products) lines.push(`- Product: ${p}`);
+    for (const v of entities.versions) lines.push(`- Version: ${v}`);
+    for (const r of entities.regions) lines.push(`- Region: ${r}`);
+    for (const d of entities.dates) lines.push(`- Date: ${d}`);
   }
   return lines.join('\n');
 }
