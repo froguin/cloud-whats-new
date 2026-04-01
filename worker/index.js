@@ -14,7 +14,7 @@ RULES:
 - Title: product name + key change only. Never truncate product names
 - Summary: exactly 2 sentences. First: what changed. Second: why it matters. Never repeat the title
 - Features: 3 items, describe capabilities not product names
-- Status labels ([Launched] etc.) go to status field only, not title
+- Status labels ([Launched] etc.) go to status field only, not title. Determine status from description content: "preview"/"미리보기" → 미리보기, "beta"/"베타" → 베타, "retired"/"deprecated" → 지원 종료, "generally available"/"GA"/"launched" → 정식 출시
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
 
 The user message includes MUST KEEP ENTITIES — reproduce them exactly.`;
@@ -26,9 +26,9 @@ const FEW_SHOT = [
   // GCP: multi-product date-based entry
   { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
   { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 1건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 Cloud Composer 3으로 전환이 필요합니다. Compute Engine에서는 CVE-2026-23268 보안 취약점이 패치되었습니다.","target":"australia-southeast2 리전에서 Cloud Composer를 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Composer 2 생성 중단, CVE-2026-23268 패치 적용, Composer 3 전환 필요","regions":"australia-southeast2, 모든 리전","status":["정식 출시"]}' },
-  // Azure: standard update
-  { role: 'user', content: 'Title: Azure Kubernetes Service (AKS) now supports Kubernetes 1.31\nDescription: This update brings improved sidecar container support, enhanced pod lifecycle management, and new scheduling features. Available in all public Azure regions.' },
-  { role: 'assistant', content: '{"title":"AKS에서 Kubernetes 1.31 지원","summary":"사이드카 컨테이너 관리가 개선되고 Pod 라이프사이클 제어가 세밀해져 복잡한 마이크로서비스 배포가 수월해집니다. 스케줄링 기능 강화로 노드 리소스 활용 효율도 높아집니다.","target":"AKS에서 프로덕션 마이크로서비스를 운영하는 플랫폼 엔지니어","features":"사이드카 독립 관리 가능, Pod 종료 흐름 세밀 제어, 노드 자원 배치 최적화","regions":"모든 Azure 퍼블릭 리전","status":["정식 출시"]}' },
+  // Azure: preview status from description — title tag goes to status field
+  { role: 'user', content: 'Title: [Preview] Azure Cosmos DB continuous backup for analytical store\nDescription: Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
+  { role: 'assistant', content: '{"title":"Azure Cosmos DB 분석 저장소 연속 백업 지원","summary":"Azure Cosmos DB 분석 저장소에서 연속 백업과 특정 시점 복원이 가능해졌습니다. 분석 워크로드의 데이터 보호가 한층 강화됩니다.","target":"Azure Cosmos DB 분석 저장소를 운영하는 데이터 엔지니어","features":"분석 저장소 연속 백업, 특정 시점 복원, 데이터 보호 강화","regions":"모든 Azure 퍼블릭 리전","status":["미리보기"]}' },
 ];
 
 const DEFAULT_QUEUE_LANG = 'ko';
