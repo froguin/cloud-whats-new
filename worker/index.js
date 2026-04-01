@@ -33,6 +33,49 @@ const RETRY_BASE_DELAY_SECONDS = 30;
 const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
 let translationJobStateReady = false;
 
+const REGION_DISPLAY_MAP = {
+  'Asia Pacific (New Zealand)': '뉴질랜드 리전',
+  'Asia Pacific (Tokyo)': '도쿄 리전',
+  'Asia Pacific (Seoul)': '서울 리전',
+  'Asia Pacific (Osaka)': '오사카 리전',
+  'Asia Pacific (Sydney)': '시드니 리전',
+  'Asia Pacific (Melbourne)': '멜버른 리전',
+  'Asia Pacific (Jakarta)': '자카르타 리전',
+  'Asia Pacific (Mumbai)': '뭄바이 리전',
+  'Asia Pacific (Hong Kong)': '홍콩 리전',
+  'Asia Pacific (Singapore)': '싱가포르 리전',
+  'Europe (Ireland)': '아일랜드 리전',
+  'Europe (London)': '런던 리전',
+  'Europe (Frankfurt)': '프랑크푸르트 리전',
+  'Europe (Paris)': '파리 리전',
+  'Europe (Stockholm)': '스톡홀름 리전',
+  'Europe (Zurich)': '취리히 리전',
+  'US East (N. Virginia)': '미국 동부(버지니아 북부) 리전',
+  'US East (Ohio)': '미국 동부(오하이오) 리전',
+  'US West (Oregon)': '미국 서부(오리건) 리전',
+  'US West (N. California)': '미국 서부(캘리포니아 북부) 리전',
+  'South America (Sao Paulo)': '남아메리카(상파울루) 리전',
+  'Middle East (UAE)': '중동(UAE) 리전',
+  'Middle East (Bahrain)': '중동(바레인) 리전',
+  'Africa (Cape Town)': '아프리카(케이프타운) 리전',
+  'Canada (Central)': '캐나다 중부 리전',
+};
+
+const VENDOR_REGION_GUIDE = {
+  aws: [
+    'AWS marketing region names should be translated naturally in Korean titles, for example Asia Pacific (New Zealand) -> 뉴질랜드 리전 and US East (Ohio) -> 미국 동부(오하이오) 리전.',
+    'If the source says all AWS Regions, output regions as 모든 AWS 리전.',
+  ],
+  gcp: [
+    'For Google Cloud, use natural Korean region labels in titles. Do not invent abbreviations such as APNZ.',
+    'If the source says all regions or does not specify a region, output regions as 모든 리전.',
+  ],
+  azure: [
+    'For Azure, keep official region names but write them naturally in Korean titles, for example Denmark East -> Denmark East 리전.',
+    'If the source says all public Azure regions, output regions as 모든 Azure 퍼블릭 리전.',
+  ],
+};
+
 const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
   json_schema: {
@@ -224,6 +267,61 @@ function normalizeShortList(value, maxItems = 3) {
     .map(item => String(item || '').trim())
     .filter(Boolean)
     .slice(0, maxItems);
+}
+
+function mapRegionDisplayName(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return REGION_DISPLAY_MAP[text] || text;
+}
+
+function normalizeRegionsField(value, csp) {
+  const items = normalizeShortList(value, 10).map(mapRegionDisplayName);
+  const joined = items.join(', ').trim();
+  const lower = joined.toLowerCase();
+
+  if (!joined || lower === 'all' || lower === 'global' || joined === '모든 리전') {
+    if (csp === 'aws') return '모든 AWS 리전';
+    if (csp === 'azure') return '모든 Azure 퍼블릭 리전';
+    return '모든 리전';
+  }
+
+  if (/all aws regions|where .*aws/i.test(joined)) return '모든 AWS 리전';
+  if (/all public azure regions|all azure regions/i.test(joined)) return '모든 Azure 퍼블릭 리전';
+  if (/all regions/i.test(joined)) {
+    if (csp === 'aws') return '모든 AWS 리전';
+    if (csp === 'azure') return '모든 Azure 퍼블릭 리전';
+    return '모든 리전';
+  }
+
+  return joined
+    .replace(/\bAPNZ\b/g, '뉴질랜드 리전')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function buildVendorPromptHints(row) {
+  const lines = [
+    'REGION WRITING RULES:',
+    '- Never invent abbreviations such as APNZ, USE1, EUW, or similar shorthand.',
+    '- Keep actual region codes like us-east-1 or ap-northeast-2 unchanged only when the source explicitly uses region codes.',
+    '- For marketing region names, use natural Korean display labels in titles and summaries.',
+    '- In the regions field, use one clear convention: a vendor-wide all-region label or an exact comma-separated region list.',
+  ];
+  for (const hint of (VENDOR_REGION_GUIDE[row.csp] || [])) {
+    lines.push(`- ${hint}`);
+  }
+  const source = `${row.title_en || ''} ${(row.description_en || '').slice(0, 800)}`;
+  const matched = Object.entries(REGION_DISPLAY_MAP)
+    .filter(([name]) => source.includes(name))
+    .slice(0, 6);
+  if (matched.length) {
+    lines.push('REGION DISPLAY HINTS:');
+    for (const [name, ko] of matched) {
+      lines.push(`- ${name} => ${ko}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function countSentences(text) {
@@ -463,7 +561,7 @@ async function buildTranslationRecord(env, row) {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
-  const userMsg = `Title: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
   const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
@@ -475,7 +573,7 @@ async function buildTranslationRecord(env, row) {
     .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   const feat = normalizeShortList(parsed.features).join(', ');
-  const reg = normalizeShortList(parsed.regions, 10).join(', ') || '모든 리전';
+  const reg = normalizeRegionsField(parsed.regions, row.csp);
   const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
   const rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
   const cleanStatus = [...new Set(rawStatus.flatMap(s => {
