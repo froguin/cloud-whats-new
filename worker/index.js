@@ -710,11 +710,12 @@ function getTranslationExecutionOptions(reason = 'backlog') {
   return { modelUsed: 'cf-llama-3.1-8b', allowLowQuality: false };
 }
 
-async function buildTranslationRecord(env, row) {
+async function buildTranslationRecord(env, row, hint = '') {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
-  const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const hintLine = hint ? `\nHint: ${hint}` : '';
+  const userMsg = `${buildVendorPromptHints(row)}${hintLine}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
   const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
@@ -763,9 +764,9 @@ async function persistTranslationRecord(env, row, record, modelUsed) {
          record.target, record.features, record.regions, record.status, modelUsed).run();
 }
 
-async function runTranslationPipeline(env, row, reason = 'backlog') {
+async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   const options = getTranslationExecutionOptions(reason);
-  const record = await buildTranslationRecord(env, row);
+  const record = await buildTranslationRecord(env, row, hint);
   if (!record) {
     return { ok: false, needsRetry: false };
   }
@@ -777,12 +778,12 @@ async function runTranslationPipeline(env, row, reason = 'backlog') {
   return { ok: true, quality: validated.quality };
 }
 
-async function queueArticleRetranslation(env, articleId, lang = DEFAULT_QUEUE_LANG, reason = 'manual') {
+async function queueArticleRetranslation(env, articleId, lang = DEFAULT_QUEUE_LANG, reason = 'manual', hint = '') {
   const row = await getArticleForTranslation(env, articleId);
   if (!row) return { found: false, queued: 0 };
   await releaseTranslationJobs(env, [{ articleId, lang }]);
   await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(articleId, lang).run();
-  const queued = await enqueueTranslationJobs(env, [{ articleId, lang, reason }]);
+  const queued = await enqueueTranslationJobs(env, [{ articleId, lang, reason, hint }]);
   return { found: true, queued };
 }
 
@@ -875,6 +876,7 @@ export default {
       const articleId = msg.body?.articleId;
       const lang = msg.body?.lang || DEFAULT_QUEUE_LANG;
       const reason = msg.body?.reason || 'backlog';
+      const hint = msg.body?.hint || '';
 
       if (!articleId || !lang) {
         msg.ack();
@@ -896,7 +898,7 @@ export default {
           continue;
         }
 
-        const result = await runTranslationPipeline(env, row, reason);
+        const result = await runTranslationPipeline(env, row, reason, hint);
         if (result?.ok) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
@@ -962,14 +964,15 @@ export default {
       return new Response(JSON.stringify({ queued, backlog }), { headers });
     }
 
-    // POST /api/retranslate?id=123 — delete existing ko translation and enqueue retranslation
+    // POST /api/retranslate?id=123&hint=... — delete existing ko translation and enqueue retranslation
     if (path === '/api/retranslate' && request.method === 'POST') {
       const id = url.searchParams.get('id');
       if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
+      const hint = url.searchParams.get('hint') || '';
       try {
-        const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual');
+        const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual', hint);
         if (!result.found) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
-        return new Response(JSON.stringify({ queued: result.queued, articleId: Number(id), reason: 'manual' }), { headers });
+        return new Response(JSON.stringify({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }), { headers });
       } catch (e) { console.error(e); }
       return new Response(JSON.stringify({ queued: 0, error: 'translation failed' }), { headers });
     }
