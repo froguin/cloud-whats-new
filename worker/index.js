@@ -944,7 +944,7 @@ export default {
       const accept = request.headers.get('Accept-Language') || '';
       const defaultLang = accept.startsWith('ja') ? 'ja' : accept.startsWith('en') ? 'en' : 'ko';
       const lang = url.searchParams.get('lang') || defaultLang;
-      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 200);
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
 
       // Include untranslated articles as English fallback
       let query, params;
