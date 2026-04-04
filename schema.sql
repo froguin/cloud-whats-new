@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS localized_content (
   regions TEXT,
   status TEXT,
   model_used TEXT,
+  translated_model TEXT,
+  translated_at TEXT,
+  reviewed_model TEXT,
+  reviewed_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(article_id, lang)
 );

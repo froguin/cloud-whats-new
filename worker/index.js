@@ -756,22 +756,23 @@ async function validateTranslationRecord(env, row, record, options = {}) {
   return { ok: true, quality, record: fixed };
 }
 
-async function persistTranslationRecord(env, row, record, modelUsed) {
+async function persistTranslationRecord(env, row, record, modelUsed, reviewModel = null) {
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_model, translated_at, reviewed_model, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime(?),?,datetime(?))'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
-         record.target, record.features, record.regions, record.status, modelUsed).run();
+         record.target, record.features, record.regions, record.status, modelUsed,
+         modelUsed, 'now', reviewModel, reviewModel ? 'now' : null).run();
 }
 
 async function runReviewPipeline(env, row) {
   const existing = await env.DB.prepare(
-    'SELECT title, summary, target, features, regions, status FROM localized_content WHERE article_id = ? AND lang = ?'
+    'SELECT title, summary, target, features, regions, status, translated_model, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
   ).bind(row.id, 'ko').first();
   if (!existing) return { ok: false };
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
-  await persistTranslationRecord(env, row, finalRecord, 'cf-reviewed');
+  await persistTranslationRecord(env, row, finalRecord, existing.translated_model || existing.model_used, REVIEW_MODEL);
   return { ok: true };
 }
 
@@ -790,7 +791,7 @@ async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   if (!quality.pass && !options.allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
-  await persistTranslationRecord(env, row, reviewed.record, options.modelUsed);
+  await persistTranslationRecord(env, row, reviewed.record, options.modelUsed, REVIEW_MODEL);
   return { ok: true, quality };
 }
 
@@ -863,7 +864,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-deepseek-r1-32b-reviewed', 'cf-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -991,7 +992,7 @@ export default {
       }
       if (action === 'review') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '25'), 100);
-        const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.model_used != ? ORDER BY a.created_at DESC LIMIT ?').bind('ko', 'cf-reviewed', limit).all();
+        const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY a.created_at DESC LIMIT ?').bind('ko', limit).all();
         const jobs = rows.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
         const queued = await enqueueTranslationJobs(env, jobs, { skipClaim: true });
         return new Response(JSON.stringify({ queued, total: rows.results.length }), { headers });
@@ -1019,7 +1020,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-deepseek-r1-32b-reviewed', 'cf-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
