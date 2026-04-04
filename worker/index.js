@@ -836,8 +836,9 @@ export default {
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
       await env.DB.prepare(`
         DELETE FROM translation_job_state
-        WHERE updated_at < datetime('now', '-2 hours')
+        WHERE updated_at < datetime('now', '-10 minutes')
       `).run();
+      const stale = await env.DB.prepare("SELECT count(*) as cnt FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first();
       const backlog = await getMissingTranslationCount(env, 'ko');
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
@@ -1045,18 +1046,19 @@ export default {
     }
 
     if (path === '/api/stats') {
-      const [byLang, byModel, backlog, queue, reviewed] = await Promise.all([
+      const [byLang, byModel, backlog, queue, reviewed, staleJobs] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
         env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
         env.DB.prepare('SELECT count(*) as count, reason FROM translation_job_state GROUP BY reason').all(),
         env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
+        env.DB.prepare("SELECT count(*) as count FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first(),
       ]);
       return new Response(JSON.stringify({
         by_lang: byLang.results,
         by_model: byModel.results,
         backlog: backlog?.count || 0,
-        queue: queue.results,
+        queue: { active: queue.results, stale: staleJobs?.count || 0 },
         review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },
       }), { headers });
     }
