@@ -1036,8 +1036,20 @@ export default {
     }
 
     if (path === '/api/stats') {
-      const stats = await env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all();
-      return new Response(JSON.stringify(stats.results), { headers });
+      const [byLang, byModel, backlog, queue, reviewed] = await Promise.all([
+        env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
+        env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
+        env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+        env.DB.prepare('SELECT count(*) as count, reason FROM translation_job_state GROUP BY reason').all(),
+        env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
+      ]);
+      return new Response(JSON.stringify({
+        by_lang: byLang.results,
+        by_model: byModel.results,
+        backlog: backlog?.count || 0,
+        queue: queue.results,
+        review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },
+      }), { headers });
     }
 
     return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
