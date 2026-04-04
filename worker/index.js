@@ -917,13 +917,6 @@ export default {
           continue;
         }
 
-        const row = await getArticleForTranslation(env, articleId);
-        if (!row) {
-          await releaseTranslationJobs(env, [{ articleId, lang }]);
-          msg.ack();
-          continue;
-        }
-
         const result = await runTranslationPipeline(env, row, reason, hint);
         if (result?.ok) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
