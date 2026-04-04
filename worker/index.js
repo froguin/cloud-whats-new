@@ -4,20 +4,36 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const SYSTEM_PROMPT = `You are a Korean cloud technology translator.
+const PRIMARY_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+const REVIEW_MODEL = '@cf/openai/gpt-oss-20b';
+
+const SYSTEM_PROMPT = `You are a Korean cloud news summarizer for IT professionals.
+
+OUTPUT: valid JSON only, no markdown wrapping.
+
+PROCESS — follow this order:
+1. Read the Description and summarize in Korean (2 sentences: what changed + why it matters). Start with 이번, 새로운, 사용자는, 이 서비스는 etc. Never restate the title.
+2. From the summary, derive a short Korean title: product name + core change. Remove status tags like [Preview], [Launched], [Retired], (GA) from the title.
+3. Determine status from description: "preview" → 미리보기, "beta" → 베타, "retired"/"deprecated" → 지원 종료, "generally available"/"GA"/"launched" → 정식 출시.
+4. Fill target (who benefits), features (3 capability descriptions), regions (use vendor's standard Korean region names or "모든 리전").
 
 RULES:
-- Output ONLY valid JSON, no markdown
-- Keep product names, region codes, versions, dates in English exactly as given
-- Translate ALL other English into Korean. Never mix English words into Korean sentences (e.g. write "및" not "and 및")
-- Write natural Korean like a tech blog
-- Title: product name + key change only. Never truncate product names
-- Summary: exactly 2 sentences. First: what changed. Second: why it matters. Start with impact words like 이번 업데이트로, 새로운, 사용자는, 이 서비스는. Do not restate the title
-- Features: 3 items, describe capabilities not product names
-- Status labels ([Launched] etc.) go to status field only, not title. Determine status from description content: "preview"/"미리보기" → 미리보기, "beta"/"베타" → 베타, "retired"/"deprecated" → 지원 종료, "generally available"/"GA"/"launched" → 정식 출시
+- Keep product names, versions, dates, region codes in English as-is
+- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및")
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
+- The user message includes MUST KEEP ENTITIES — reproduce them exactly.`;
 
-The user message includes MUST KEEP ENTITIES — reproduce them exactly.`;
+const REVIEW_PROMPT = `You review Korean cloud news cards. Check ONLY these fields against the original English and fix errors:
+
+CHECK:
+- title: has product name + change? status tags removed? not truncated?
+- status: matches description content (preview/beta/retired/GA)?
+- regions: uses vendor standard Korean names? correct per description?
+- target/features: accurate to description?
+
+OUTPUT JSON with corrected fields only. Omit fields that are correct.
+{"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
+If all correct, output: {"pass":true}`;
 
 const FEW_SHOT = [
   // AWS: standard single-product update
@@ -546,52 +562,28 @@ function applyQualitySuggestions(record, review) {
 }
 
 async function reviewTranslationQualityWithAI(env, row, record) {
-  const reviewInput = {
-    region_guidance: buildVendorPromptHints(row),
+  const reviewInput = JSON.stringify({
     original_title: row.title_en,
     original_description: String(row.description_en || '').slice(0, 1500),
-    translated_title: record.title,
-    translated_summary: record.summary,
-    translated_target: record.target,
-    translated_features: record.features,
-    translated_regions: record.regions,
-  };
-
+    region_guidance: buildVendorPromptHints(row),
+    translated: { title: record.title, summary: record.summary, target: record.target, features: record.features, regions: record.regions, status: record.status },
+  });
   try {
-    const aiResp = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: [
-        { role: 'system', content: QUALITY_REVIEW_PROMPT },
-        { role: 'user', content: JSON.stringify(reviewInput) },
-      ],
-      response_format: QUALITY_REVIEW_JSON_SCHEMA,
-      max_tokens: 384,
-      temperature: 0.1,
+    const aiResp = await env.AI.run(REVIEW_MODEL, {
+      messages: [{ role: 'system', content: REVIEW_PROMPT }, { role: 'user', content: reviewInput }],
+      max_tokens: 384, temperature: 0.1,
     });
     const parsed = parseAIResponse(aiResp);
-    if (!parsed || typeof parsed.pass !== 'boolean') {
-      return { pass: true, reasons: ['review-unavailable'], record };
-    }
-
-    const suggestedRecord = applyQualitySuggestions(record, parsed);
-    const suggestedQuality = assessTranslationQuality(suggestedRecord, row);
-    const hasSuggestion =
-      suggestedRecord.title !== record.title || suggestedRecord.summary !== record.summary;
-
-    if (!parsed.pass && hasSuggestion && suggestedQuality.pass) {
-      return {
-        pass: true,
-        reasons: [...(parsed.reasons || []), 'reviewer-applied-edit'],
-        record: suggestedRecord,
-      };
-    }
-
-    return {
-      pass: !!parsed.pass,
-      reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
-      record,
-    };
-  } catch (error) {
-    console.error('quality review error:', error.message);
+    if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
+    const fixed = { ...record };
+    if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (parsed.status) fixed.status = JSON.stringify(Array.isArray(parsed.status) ? parsed.status : [parsed.status]);
+    if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp);
+    if (parsed.target) fixed.target = parsed.target;
+    if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
+    return { pass: true, reasons: ['reviewer-applied-edit'], record: fixed };
+  } catch (e) {
+    console.error('review error:', e.message);
     return { pass: true, reasons: ['review-error'], record };
   }
 }
@@ -701,19 +693,17 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
-const RETRY_MODEL = '@cf/openai/gpt-oss-20b';
-
 function getTranslationExecutionOptions(reason = 'backlog') {
   if (reason === 'quality_retry') {
-    return { modelUsed: 'cf-gpt-oss-20b', allowLowQuality: true, model: RETRY_MODEL };
+    return { modelUsed: 'cf-qwen3-30b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
   }
   if (reason === 'manual') {
-    return { modelUsed: 'manual', allowLowQuality: false };
+    return { modelUsed: 'manual', allowLowQuality: false, model: PRIMARY_MODEL };
   }
-  return { modelUsed: 'cf-llama-3.1-8b', allowLowQuality: false };
+  return { modelUsed: 'cf-qwen3-30b', allowLowQuality: false, model: PRIMARY_MODEL };
 }
 
-async function buildTranslationRecord(env, row, hint = '', model = '@cf/meta/llama-3.1-8b-instruct') {
+async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
@@ -773,12 +763,17 @@ async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   if (!record) {
     return { ok: false, needsRetry: false };
   }
-  const validated = await validateTranslationRecord(env, row, record, options);
-  if (!validated.ok) {
-    return { ...validated, reasons: validated.reasons };
+  // Deterministic fixes
+  const fixed = applyDeterministicFixes(record, row);
+  // AI review with different model — checks title, status, regions
+  const reviewed = await reviewTranslationQualityWithAI(env, row, fixed);
+  // Final quality gate
+  const quality = assessTranslationQuality(reviewed.record, row);
+  if (!quality.pass && !options.allowLowQuality) {
+    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
-  await persistTranslationRecord(env, row, validated.record, options.modelUsed);
-  return { ok: true, quality: validated.quality };
+  await persistTranslationRecord(env, row, reviewed.record, options.modelUsed);
+  return { ok: true, quality };
 }
 
 async function queueArticleRetranslation(env, articleId, lang = DEFAULT_QUEUE_LANG, reason = 'manual', hint = '') {
@@ -850,7 +845,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-qwen3-30b-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -996,7 +991,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-qwen3-30b-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
