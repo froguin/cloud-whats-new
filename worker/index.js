@@ -481,6 +481,14 @@ function applyDeterministicFixes(record, row) {
   title = stripMd(title);
   summary = stripMd(summary);
 
+  // Fix 1b: Strip status tags from title
+  title = title.replace(/\s*\[?\b(?:Public Preview|Generally Available|Retirement|In preview|Launched|GA|Preview)\b\]?\s*[:：]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+
+  // Fix 1c: Strip CJK characters (Chinese/Japanese) from title and summary
+  const stripCJK = (s) => s.replace(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g, '').replace(/\s+/g, ' ').trim();
+  title = stripCJK(title);
+  summary = stripCJK(summary);
+
   // Fix 2: Entity preservation check — if product name truncated, use original
   for (const product of entities.products) {
     // Check if product name appears truncated in title
