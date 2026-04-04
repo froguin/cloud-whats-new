@@ -690,13 +690,10 @@ async function hasLocalizedContent(env, articleId, lang) {
 }
 
 function getTranslationExecutionOptions(reason = 'backlog') {
-  if (reason === 'quality_retry') {
-    return { modelUsed: 'cf-llama-70b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
-  }
-  if (reason === 'manual') {
-    return { modelUsed: 'manual', allowLowQuality: false, model: PRIMARY_MODEL };
-  }
-  return { modelUsed: 'cf-llama-70b', allowLowQuality: false, model: PRIMARY_MODEL };
+  return {
+    model: PRIMARY_MODEL,
+    allowLowQuality: reason === 'quality_retry',
+  };
 }
 
 async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
@@ -746,13 +743,13 @@ async function validateTranslationRecord(env, row, record, options = {}) {
   return { ok: true, quality, record: fixed };
 }
 
-async function persistTranslationRecord(env, row, record, modelUsed, reviewModel = null) {
+async function persistTranslationRecord(env, row, record, modelUsed, { isReview = false } = {}) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_model, translated_at, reviewed_model, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_at, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
          record.target, record.features, record.regions, record.status, modelUsed,
-         modelUsed, now, reviewModel, reviewModel ? now : null).run();
+         now, isReview ? now : null).run();
 }
 
 async function runReviewPipeline(env, row) {
@@ -768,7 +765,7 @@ async function runReviewPipeline(env, row) {
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
-  await persistTranslationRecord(env, row, finalRecord, existing.translated_model || existing.model_used, REVIEW_MODEL);
+  await persistTranslationRecord(env, row, finalRecord, REVIEW_MODEL, { isReview: true });
   return { ok: true };
 }
 
@@ -787,7 +784,7 @@ async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   if (!quality.pass && !options.allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
-  await persistTranslationRecord(env, row, reviewed.record, options.modelUsed, REVIEW_MODEL);
+  await persistTranslationRecord(env, row, reviewed.record, REVIEW_MODEL, { isReview: true });
   return { ok: true, quality };
 }
 
