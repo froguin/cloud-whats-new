@@ -34,6 +34,11 @@ const REVIEW_PROMPT = `You review Korean cloud news cards. Compare the translate
 
 ${TRANSLATION_RULES}
 
+Also fix:
+- Remove Chinese characters (漢字), Japanese kana, or any non-Korean/English/number characters
+- Remove hallucinated content not in the original English
+- Fix garbled or truncated text
+
 OUTPUT JSON with corrected fields only. Omit fields that are correct.
 {"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
 If all correct, output: {"pass":true}`;
