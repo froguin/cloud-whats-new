@@ -755,11 +755,18 @@ async function persistTranslationRecord(env, row, record, modelUsed, reviewModel
          modelUsed, now, reviewModel, reviewModel ? now : null).run();
 }
 
+const LEGACY_MODELS = new Set(['cf-llama-3.1-8b', 'cf-reviewed', 'retried', 'manual', 'cf-deepseek-r1-32b']);
+
 async function runReviewPipeline(env, row) {
   const existing = await env.DB.prepare(
     'SELECT title, summary, target, features, regions, status, translated_model, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
   ).bind(row.id, 'ko').first();
   if (!existing) return { ok: false };
+  // Legacy model → full retranslation with current pipeline
+  if (LEGACY_MODELS.has(existing.model_used)) {
+    await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(row.id, 'ko').run();
+    return runTranslationPipeline(env, row);
+  }
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
