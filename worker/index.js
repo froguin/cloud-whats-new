@@ -757,11 +757,12 @@ async function validateTranslationRecord(env, row, record, options = {}) {
 }
 
 async function persistTranslationRecord(env, row, record, modelUsed, reviewModel = null) {
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_model, translated_at, reviewed_model, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime(?),?,datetime(?))'
+    'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_model, translated_at, reviewed_model, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
   ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
          record.target, record.features, record.regions, record.status, modelUsed,
-         modelUsed, 'now', reviewModel, reviewModel ? 'now' : null).run();
+         modelUsed, now, reviewModel, reviewModel ? now : null).run();
 }
 
 async function runReviewPipeline(env, row) {
