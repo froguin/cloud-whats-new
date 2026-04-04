@@ -833,6 +833,15 @@ export default {
     // Every minute: queue backlog translations
     const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
 
+    // Every 5 min: if no backlog, queue pending reviews
+    if (minute % 5 === 0 && queued === 0) {
+      const pending = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY lc.created_at DESC LIMIT 10').bind('ko').all();
+      if (pending.results.length > 0) {
+        const jobs = pending.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
+        await enqueueTranslationJobs(env, jobs, { skipClaim: true });
+      }
+    }
+
     // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
     if (minute % 15 === 0) {
       const n = await fetchRSS(env);
