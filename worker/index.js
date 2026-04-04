@@ -1065,6 +1065,77 @@ export default {
       }), { headers });
     }
 
+    // MCP Server — JSON-RPC 2.0 over HTTP
+    if (path === '/mcp' && request.method === 'POST') {
+      const rpc = await request.json();
+      const mcpHeaders = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      const respond = (id, result) => new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), { headers: mcpHeaders });
+      const error = (id, code, msg) => new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message: msg } }), { headers: mcpHeaders });
+
+      if (rpc.method === 'initialize') {
+        return respond(rpc.id, {
+          protocolVersion: '2024-11-05',
+          serverInfo: { name: 'whats-new-kr', version: '1.0.0' },
+          capabilities: { tools: {} },
+        });
+      }
+
+      if (rpc.method === 'tools/list') {
+        return respond(rpc.id, { tools: [
+          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Returns Korean-translated summaries.', inputSchema: {
+            type: 'object', properties: {
+              query: { type: 'string', description: 'Search keyword (product name, feature, etc.)' },
+              csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter' },
+              days: { type: 'number', description: 'Look back N days (default 7)' },
+              limit: { type: 'number', description: 'Max results (default 10)' },
+            },
+          }},
+          { name: 'get_release', description: 'Get a specific release note by article ID.', inputSchema: {
+            type: 'object', properties: { id: { type: 'number', description: 'Article ID' } }, required: ['id'],
+          }},
+          { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
+        ]});
+      }
+
+      if (rpc.method === 'tools/call') {
+        const { name, arguments: args } = rpc.params || {};
+
+        if (name === 'search_releases') {
+          const csp = args?.csp || null;
+          const days = args?.days || 7;
+          const limit = Math.min(args?.limit || 10, 50);
+          const query = args?.query || '';
+          let sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.pub_date, a.title_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
+          const params = [`-${days} days`];
+          if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
+          if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ? OR a.title_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`, `%${query}%`); }
+          sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
+          params.push(limit);
+          const rows = await env.DB.prepare(sql).bind(...params).all();
+          return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
+        }
+
+        if (name === 'get_release') {
+          const row = await env.DB.prepare('SELECT lc.*, a.title_en, a.description_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.article_id = ? AND lc.lang = ?').bind(args.id, 'ko').first();
+          return respond(rpc.id, { content: [{ type: 'text', text: row ? JSON.stringify(row, null, 2) : 'Not found' }] });
+        }
+
+        if (name === 'get_stats') {
+          const [backlog, reviewed, queue] = await Promise.all([
+            env.DB.prepare('SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+            env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
+            env.DB.prepare('SELECT count(*) as c, reason FROM translation_job_state GROUP BY reason').all(),
+          ]);
+          return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify({ backlog: backlog?.c, total: reviewed?.total, reviewed: reviewed?.reviewed, queue: queue.results }) }] });
+        }
+
+        return error(rpc.id, -32601, `Unknown tool: ${name}`);
+      }
+
+      if (rpc.method === 'notifications/initialized') return new Response('', { status: 204 });
+      return error(rpc.id, -32601, `Unknown method: ${rpc.method}`);
+    }
+
     return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
   },
 };
