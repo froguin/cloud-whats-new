@@ -578,7 +578,11 @@ async function reviewTranslationQualityWithAI(env, row, record, hint = '') {
     if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
     const fixed = { ...record };
     if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
-    if (parsed.status) fixed.status = JSON.stringify(Array.isArray(parsed.status) ? parsed.status : [parsed.status]);
+    if (parsed.status) {
+      let s = parsed.status;
+      if (typeof s === 'string') try { s = JSON.parse(s); } catch {}
+      fixed.status = JSON.stringify(Array.isArray(s) ? s : [s]);
+    }
     if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp);
     if (parsed.target) fixed.target = parsed.target;
     if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
