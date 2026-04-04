@@ -154,27 +154,13 @@ const TRANSLATION_JSON_SCHEMA = {
   type: 'json_schema',
   json_schema: {
     type: 'object',
-    additionalProperties: false,
     properties: {
       title: { type: 'string' },
       summary: { type: 'string' },
       target: { type: 'string' },
-      features: {
-        oneOf: [
-          { type: 'string' },
-          { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 3 },
-        ],
-      },
-      regions: {
-        oneOf: [
-          { type: 'string' },
-          { type: 'array', items: { type: 'string' } },
-        ],
-      },
-      status: {
-        type: 'array',
-        items: { type: 'string' },
-      },
+      features: { type: 'string' },
+      regions: { type: 'string' },
+      status: { type: 'array', items: { type: 'string' } },
     },
     required: ['title', 'summary', 'target', 'features', 'regions', 'status'],
   },
