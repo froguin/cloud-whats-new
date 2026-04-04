@@ -760,6 +760,19 @@ async function persistTranslationRecord(env, row, record, modelUsed) {
          record.target, record.features, record.regions, record.status, modelUsed).run();
 }
 
+async function runReviewPipeline(env, row) {
+  const existing = await env.DB.prepare(
+    'SELECT title, summary, target, features, regions, status FROM localized_content WHERE article_id = ? AND lang = ?'
+  ).bind(row.id, 'ko').first();
+  if (!existing) return { ok: false };
+  const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
+  const reviewed = await reviewTranslationQualityWithAI(env, row, record);
+  if (reviewed.reasons?.includes('reviewer-applied-edit')) {
+    await persistTranslationRecord(env, row, reviewed.record, 'cf-reviewed');
+  }
+  return { ok: true };
+}
+
 async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   const options = getTranslationExecutionOptions(reason);
   const record = await buildTranslationRecord(env, row, hint, options.model);
@@ -878,6 +891,7 @@ export default {
     for (const msg of batch.messages) {
       const articleId = msg.body?.articleId;
       const lang = msg.body?.lang || DEFAULT_QUEUE_LANG;
+      const action = msg.body?.action || 'translate';
       const reason = msg.body?.reason || 'backlog';
       const hint = msg.body?.hint || '';
 
@@ -887,6 +901,15 @@ export default {
       }
 
       try {
+        const row = await getArticleForTranslation(env, articleId);
+        if (!row) { msg.ack(); continue; }
+
+        if (action === 'review') {
+          await runReviewPipeline(env, row);
+          msg.ack();
+          continue;
+        }
+
         await touchTranslationJob(env, articleId, lang, reason);
         if (await hasLocalizedContent(env, articleId, lang)) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
@@ -970,6 +993,13 @@ export default {
         const n = await fetchRSS(env);
         const backlog = await getMissingTranslationCount(env, 'ko');
         return new Response(JSON.stringify({ newArticles: n.newArticles, queued: n.queued, backlog }), { headers });
+      }
+      if (action === 'review') {
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '25'), 100);
+        const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.model_used != ? ORDER BY a.created_at DESC LIMIT ?').bind('ko', 'cf-reviewed', limit).all();
+        const jobs = rows.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
+        const queued = await enqueueTranslationJobs(env, jobs, { skipClaim: true });
+        return new Response(JSON.stringify({ queued, total: rows.results.length }), { headers });
       }
       const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       const backlog = await getMissingTranslationCount(env, 'ko');
