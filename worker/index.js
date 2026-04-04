@@ -4,7 +4,7 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const PRIMARY_MODEL = '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b';
+const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
 const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is
@@ -687,12 +687,12 @@ async function hasLocalizedContent(env, articleId, lang) {
 
 function getTranslationExecutionOptions(reason = 'backlog') {
   if (reason === 'quality_retry') {
-    return { modelUsed: 'cf-deepseek-r1-32b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
+    return { modelUsed: 'cf-llama-70b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
   }
   if (reason === 'manual') {
     return { modelUsed: 'manual', allowLowQuality: false, model: PRIMARY_MODEL };
   }
-  return { modelUsed: 'cf-deepseek-r1-32b', allowLowQuality: false, model: PRIMARY_MODEL };
+  return { modelUsed: 'cf-llama-70b', allowLowQuality: false, model: PRIMARY_MODEL };
 }
 
 async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
