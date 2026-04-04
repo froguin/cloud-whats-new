@@ -767,9 +767,8 @@ async function runReviewPipeline(env, row) {
   if (!existing) return { ok: false };
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record);
-  if (reviewed.reasons?.includes('reviewer-applied-edit')) {
-    await persistTranslationRecord(env, row, reviewed.record, 'cf-reviewed');
-  }
+  const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
+  await persistTranslationRecord(env, row, finalRecord, 'cf-reviewed');
   return { ok: true };
 }
 
