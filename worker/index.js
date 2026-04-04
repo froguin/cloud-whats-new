@@ -4,8 +4,8 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const PRIMARY_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
-const REVIEW_MODEL = '@cf/openai/gpt-oss-20b';
+const PRIMARY_MODEL = '@cf/openai/gpt-oss-20b';
+const REVIEW_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is
 - Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및")
@@ -698,12 +698,12 @@ async function hasLocalizedContent(env, articleId, lang) {
 
 function getTranslationExecutionOptions(reason = 'backlog') {
   if (reason === 'quality_retry') {
-    return { modelUsed: 'cf-qwen3-30b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
+    return { modelUsed: 'cf-gpt-oss-20b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
   }
   if (reason === 'manual') {
     return { modelUsed: 'manual', allowLowQuality: false, model: PRIMARY_MODEL };
   }
-  return { modelUsed: 'cf-qwen3-30b', allowLowQuality: false, model: PRIMARY_MODEL };
+  return { modelUsed: 'cf-gpt-oss-20b', allowLowQuality: false, model: PRIMARY_MODEL };
 }
 
 async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
@@ -860,7 +860,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-qwen3-30b-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b-reviewed', 'cf-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -1016,7 +1016,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-qwen3-30b-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b-reviewed', 'cf-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
