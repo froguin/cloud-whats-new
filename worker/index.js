@@ -557,16 +557,17 @@ function applyQualitySuggestions(record, review) {
   return next;
 }
 
-async function reviewTranslationQualityWithAI(env, row, record) {
+async function reviewTranslationQualityWithAI(env, row, record, hint = '') {
   const reviewInput = JSON.stringify({
     original_title: row.title_en,
     original_description: String(row.description_en || '').slice(0, 1500),
     region_guidance: buildVendorPromptHints(row),
     translated: { title: record.title, summary: record.summary, target: record.target, features: record.features, regions: record.regions, status: record.status },
   });
+  const reviewPrompt = hint ? `${REVIEW_PROMPT}\n\n=== 추가 지시 ===\n${hint}` : REVIEW_PROMPT;
   try {
     const aiResp = await env.AI.run(REVIEW_MODEL, {
-      messages: [{ role: 'system', content: REVIEW_PROMPT }, { role: 'user', content: reviewInput }],
+      messages: [{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }],
       max_tokens: 384, temperature: 0.1,
     });
     const parsed = parseAIResponse(aiResp);
@@ -752,18 +753,18 @@ async function persistTranslationRecord(env, row, record, modelUsed, { isReview 
          now, isReview ? now : null).run();
 }
 
-async function runReviewPipeline(env, row) {
+async function runReviewPipeline(env, row, hint = '') {
   const existing = await env.DB.prepare(
-    'SELECT title, summary, target, features, regions, status, translated_model, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
+    'SELECT title, summary, target, features, regions, status, translated_at, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
   ).bind(row.id, 'ko').first();
   if (!existing) return { ok: false };
-  // No translated_model = legacy → full retranslation
-  if (!existing.translated_model) {
+  // No translated_at = legacy → full retranslation
+  if (!existing.translated_at) {
     await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(row.id, 'ko').run();
-    return runTranslationPipeline(env, row);
+    return runTranslationPipeline(env, row, 'backlog', hint);
   }
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
-  const reviewed = await reviewTranslationQualityWithAI(env, row, record);
+  const reviewed = await reviewTranslationQualityWithAI(env, row, record, hint);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
   await persistTranslationRecord(env, row, finalRecord, REVIEW_MODEL, { isReview: true });
   return { ok: true };
@@ -778,7 +779,7 @@ async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
   // Deterministic fixes
   const fixed = applyDeterministicFixes(record, row);
   // AI review with different model — checks title, status, regions
-  const reviewed = await reviewTranslationQualityWithAI(env, row, fixed);
+  const reviewed = await reviewTranslationQualityWithAI(env, row, fixed, hint);
   // Final quality gate
   const quality = assessTranslationQuality(reviewed.record, row);
   if (!quality.pass && !options.allowLowQuality) {
@@ -901,7 +902,7 @@ export default {
         if (!row) { msg.ack(); continue; }
 
         if (action === 'review') {
-          await runReviewPipeline(env, row);
+          await runReviewPipeline(env, row, hint);
           msg.ack();
           continue;
         }
@@ -995,17 +996,23 @@ export default {
       return new Response(JSON.stringify({ queued, backlog }), { headers });
     }
 
-    // POST /api/retranslate?id=123&hint=... — delete existing ko translation and enqueue retranslation
+    // POST /api/retranslate?id=123&hint=...&action=review|translate
     if (path === '/api/retranslate' && request.method === 'POST') {
       const id = url.searchParams.get('id');
       if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
       const hint = url.searchParams.get('hint') || '';
+      const action = url.searchParams.get('action') || 'translate';
       try {
+        if (action === 'review') {
+          // Review only — keep translation, re-review with hint
+          await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
+          return new Response(JSON.stringify({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }), { headers });
+        }
         const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual', hint);
         if (!result.found) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
         return new Response(JSON.stringify({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }), { headers });
       } catch (e) { console.error(e); }
-      return new Response(JSON.stringify({ queued: 0, error: 'translation failed' }), { headers });
+      return new Response(JSON.stringify({ queued: 0, error: 'failed' }), { headers });
     }
 
     // POST /api/retranslate-bad — bulk retranslate poor quality translations
