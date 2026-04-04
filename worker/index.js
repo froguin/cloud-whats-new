@@ -4,8 +4,8 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const PRIMARY_MODEL = '@cf/openai/gpt-oss-20b';
-const REVIEW_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+const PRIMARY_MODEL = '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b';
+const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
 const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is
 - Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및")
@@ -330,8 +330,11 @@ function calculateRetryDelay(attempts, baseDelay = RETRY_BASE_DELAY_SECONDS, max
 function parseAIResponse(aiResp) {
   if (!aiResp) return null;
   if (aiResp.response && typeof aiResp.response === 'object') return aiResp.response;
-  if (typeof aiResp.response === 'string') return safeParseJSON(aiResp.response);
-  if (typeof aiResp === 'string') return safeParseJSON(aiResp);
+  if (typeof aiResp.response === 'string') {
+    const cleaned = aiResp.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return safeParseJSON(cleaned);
+  }
+  if (typeof aiResp === 'string') return safeParseJSON(aiResp.replace(/<think>[\s\S]*?<\/think>/g, '').trim());
   return null;
 }
 
@@ -698,12 +701,12 @@ async function hasLocalizedContent(env, articleId, lang) {
 
 function getTranslationExecutionOptions(reason = 'backlog') {
   if (reason === 'quality_retry') {
-    return { modelUsed: 'cf-gpt-oss-20b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
+    return { modelUsed: 'cf-deepseek-r1-32b-reviewed', allowLowQuality: true, model: PRIMARY_MODEL };
   }
   if (reason === 'manual') {
     return { modelUsed: 'manual', allowLowQuality: false, model: PRIMARY_MODEL };
   }
-  return { modelUsed: 'cf-gpt-oss-20b', allowLowQuality: false, model: PRIMARY_MODEL };
+  return { modelUsed: 'cf-deepseek-r1-32b', allowLowQuality: false, model: PRIMARY_MODEL };
 }
 
 async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
@@ -715,7 +718,7 @@ async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL
   const aiResp = await env.AI.run(model, {
     messages: [{ role: 'system', content: sysPrompt }, ...FEW_SHOT, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
-    max_tokens: 768, temperature: 0.1,
+    max_tokens: 2048, temperature: 0.1,
   });
   const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return null;
@@ -860,7 +863,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b-reviewed', 'cf-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-deepseek-r1-32b-reviewed', 'cf-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
@@ -1016,7 +1019,7 @@ export default {
       const bad = await env.DB.prepare(`
         SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
         JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-gpt-oss-20b-reviewed', 'cf-reviewed') AND (
+        WHERE lc.lang = 'ko' AND lc.model_used NOT IN ('manual', 'cf-deepseek-r1-32b-reviewed', 'cf-reviewed') AND (
           lc.title LIKE '%.graphics%'
           
           OR lc.title GLOB '* [A-Za-z]'
