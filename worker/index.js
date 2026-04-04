@@ -760,9 +760,8 @@ async function runReviewPipeline(env, row) {
     'SELECT title, summary, target, features, regions, status, translated_model, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
   ).bind(row.id, 'ko').first();
   if (!existing) return { ok: false };
-  // Not translated by current primary model → full retranslation
-  const currentModelLabel = 'cf-llama-70b';
-  if (!existing.model_used?.startsWith(currentModelLabel)) {
+  // No translated_model = legacy → full retranslation
+  if (!existing.translated_model) {
     await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(row.id, 'ko').run();
     return runTranslationPipeline(env, row);
   }
