@@ -528,6 +528,7 @@ function assessTranslationQuality(record, row) {
   const features = normalizeShortList(record.features);
 
   if (!title || !summary) reasons.push('missing-core-fields');
+  if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(title + summary)) reasons.push('cjk-contamination');
   if (hasDanglingTitleFragment(title)) reasons.push('title-truncated');
   if (hasMarkdownArtifacts(title) || hasMarkdownArtifacts(summary)) reasons.push('markdown-artifact');
   if (title === row.title_en) reasons.push('title-not-translated');
