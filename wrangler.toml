@@ -21,7 +21,7 @@ max_retries = 3
 dead_letter_queue = "cloud-whats-new-translation-jobs-dlq"
 
 [triggers]
-crons = ["0,15,30,45 * * * *", "5,10,20,25,35,40,50,55 * * * *"]
+crons = ["*/1 * * * *"]
 
 [ai]
 binding = "AI"

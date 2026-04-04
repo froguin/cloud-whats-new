@@ -52,7 +52,6 @@ const FEW_SHOT = [
 
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
-const FETCH_CRONS = new Set(['0,15,30,45 * * * *']);
 let translationJobStateReady = false;
 
 const REGION_DISPLAY_MAP = {
@@ -829,8 +828,13 @@ export default {
   async scheduled(event, env, ctx) {
     await ensureTranslationJobStateTable(env);
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
-    if (FETCH_CRONS.has(event.cron)) {
-      // quarter-hour fetch RSS + cleanup
+    const minute = new Date().getMinutes();
+
+    // Every minute: queue backlog translations
+    const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
+
+    // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
+    if (minute % 15 === 0) {
       const n = await fetchRSS(env);
       await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
       await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
@@ -840,6 +844,7 @@ export default {
       `).run();
       const stale = await env.DB.prepare("SELECT count(*) as cnt FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first();
       const backlog = await getMissingTranslationCount(env, 'ko');
+      if (backlog > 0) await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
       const webhookUrl = env.ALERT_WEBHOOK_URL;
@@ -852,36 +857,6 @@ export default {
           }).catch(() => {});
         }
       }
-    } else {
-      // queue backlog articles for translation
-      const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
-      // Backstop quality check for already-saved low quality translations (max 5 per run)
-      const bad = await env.DB.prepare(`
-        SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
-        JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
-          lc.title LIKE '%.graphics%'
-          
-          OR lc.title GLOB '* [A-Za-z]'
-          OR lc.title GLOB '*[(/-]'
-          OR lc.title = a.title_en
-          OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
-          OR length(lc.summary) < 30
-          OR lc.summary LIKE '%_workflow_%'
-          OR lc.summary LIKE '%**%'
-          OR lc.summary LIKE '%\`%'
-          OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
-          OR lc.title LIKE '%and 및%'
-        ) LIMIT 5
-      `).all();
-      const retryIds = [];
-      for (const row of bad.results) {
-        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        retryIds.push(row.id);
-      }
-      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
-      const backlog = await getMissingTranslationCount(env, 'ko');
-      console.log(`Cron — ${queued} queued for translation, ${retried} quality-retried, ${backlog} waiting for ko`);
     }
   },
   async queue(batch, env, ctx) {
