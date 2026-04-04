@@ -315,6 +315,10 @@ function calculateRetryDelay(attempts, baseDelay = RETRY_BASE_DELAY_SECONDS, max
 
 function parseAIResponse(aiResp) {
   if (!aiResp) return null;
+  // OpenAI-compatible format (choices[0].message.content)
+  const content = aiResp?.choices?.[0]?.message?.content;
+  if (content) return safeParseJSON(content);
+  // Workers AI format (response)
   if (aiResp.response && typeof aiResp.response === 'object') return aiResp.response;
   if (typeof aiResp.response === 'string') {
     const cleaned = aiResp.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
