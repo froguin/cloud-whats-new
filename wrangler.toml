@@ -30,6 +30,8 @@ binding = "AI"
 # wrangler secret put ALERT_WEBHOOK_URL
 # Key ring for protected APIs and MCP
 # wrangler secret put API_KEY_RING
+# Recovery token for emergency admin access
+# wrangler secret put API_KEY_RECOVERY_TOKEN
 [vars]
 ALERT_WEBHOOK_URL = ""
 SITE_URL = "https://whats-new.kr"

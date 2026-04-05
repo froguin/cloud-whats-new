@@ -272,20 +272,37 @@ function getCorsOrigin(request, env) {
 
 function parseApiKeyRing(env) {
   const raw = env.API_KEY_RING || '';
-  if (!raw) return [];
+  let keys = [];
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        keys = parsed
+          .filter((entry) => entry && typeof entry === 'object')
+          .map((entry) => ({
+            id: String(entry.id || ''),
+            type: String(entry.type || 'service'),
+            token: String(entry.token || ''),
+          }));
+      }
+    } catch (error) {
+      console.error('Failed to parse API_KEY_RING:', error.message);
+    }
+  }
+
+  const recoveryToken = String(env.API_KEY_RECOVERY_TOKEN || '').trim();
+  if (recoveryToken) {
+    keys.push({
+      id: 'recovery',
+      type: 'service',
+      token: recoveryToken,
+    });
+  }
+
   try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry) => entry && typeof entry === 'object')
-      .map((entry) => ({
-        id: String(entry.id || ''),
-        type: String(entry.type || 'service'),
-        token: String(entry.token || ''),
-      }))
-      .filter((entry) => entry.id && entry.token);
+    return keys.filter((entry) => entry.id && entry.token);
   } catch (error) {
-    console.error('Failed to parse API_KEY_RING:', error.message);
+    console.error('Failed to normalize auth keys:', error.message);
     return [];
   }
 }
