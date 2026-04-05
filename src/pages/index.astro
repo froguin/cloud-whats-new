@@ -11,12 +11,12 @@ const csps = [
 ];
 
 const data: Record<string, any[]> = {};
-for (const c of csps) {
-  try {
-    const res = await fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=30`);
-    data[c.id] = (await res.json()).items || [];
-  } catch { data[c.id] = []; }
-}
+const results = await Promise.allSettled(
+  csps.map(c => fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=30`).then(r => r.json()))
+);
+csps.forEach((c, i) => {
+  data[c.id] = results[i].status === 'fulfilled' ? results[i].value.items || [] : [];
+});
 
 const structuredData = [
   {
@@ -74,7 +74,7 @@ const structuredData = [
           <h2 class="text-base sm:text-lg font-bold" style={`color: var(--color-text-primary); font-family: ${c.font}; font-weight: ${c.weight || 700};`}>
             {c.name}
           </h2>
-          <a href={`/${c.id}`} class="text-xs font-medium px-2 py-1 rounded" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 10%, transparent);`}>
+          <a href={`/${c.id}`} class="text-xs font-semibold px-2 py-1 rounded" style={`color: ${c.isGradient ? c.accent : c.color}; background: color-mix(in srgb, ${c.isGradient ? c.accent : c.color} 12%, transparent);`}>
             모두 보기 →
           </a>
         </div>
