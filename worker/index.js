@@ -1051,8 +1051,8 @@ export default {
 
     const isProtectedApi =
       request.method === 'POST' &&
-      (path === '/api/trigger' || path === '/api/retranslate' || path === '/api/retranslate-bad' || path === '/mcp');
-    const requiresAdminIp = request.method === 'POST' && (path === '/api/retranslate' || path === '/api/retranslate-bad');
+      (path === '/api/pipeline' || path === '/mcp');
+    const requiresAdminIp = request.method === 'POST' && (path === '/api/pipeline');
     if (path === '/mcp' && request.method === 'POST') {
       authMode = authMode === 'off' ? 'on' : authMode;
     }
@@ -1103,71 +1103,74 @@ export default {
       return jsonResponse({ items: rows.results, count: rows.results.length, lang }, {}, headers);
     }
 
-    if (path === '/api/trigger' && request.method === 'POST') {
-      const action = url.searchParams.get('action') || 'translate';
+    if (path === '/api/pipeline' && request.method === 'POST') {
+      const action = url.searchParams.get('action') || 'fetch';
+      const id = url.searchParams.get('id');
+      const hint = url.searchParams.get('hint') || '';
+
       if (action === 'fetch') {
         const n = await fetchRSS(env);
         const backlog = await getMissingTranslationCount(env, 'ko');
         return jsonResponse({ newArticles: n.newArticles, queued: n.queued, backlog }, {}, headers);
       }
+
       if (action === 'review') {
+        if (id) {
+          // Re-review a single article with an optional hint
+          await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
+          return jsonResponse({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }, {}, headers);
+        }
+        // Bulk queue unreviewed articles
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '25'), 100);
         const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY a.created_at DESC LIMIT ?').bind('ko', limit).all();
         const jobs = rows.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
         const queued = await enqueueTranslationJobs(env, jobs, { skipClaim: true });
         return jsonResponse({ queued, total: rows.results.length }, {}, headers);
       }
-      const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
-      const backlog = await getMissingTranslationCount(env, 'ko');
-      return jsonResponse({ queued, backlog }, {}, headers);
-    }
 
-    // POST /api/retranslate?id=123&hint=...&action=review|translate
-    if (path === '/api/retranslate' && request.method === 'POST') {
-      const id = url.searchParams.get('id');
-      if (!id) return jsonResponse({ error: 'id required' }, { status: 400 }, headers);
-      const hint = url.searchParams.get('hint') || '';
-      const action = url.searchParams.get('action') || 'translate';
-      try {
-        if (action === 'review') {
-          // Review only — keep translation, re-review with hint
-          await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
-          return jsonResponse({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }, {}, headers);
-        }
+      if (action === 'retranslate') {
+        if (!id) return jsonResponse({ error: 'id required for retranslate' }, { status: 400 }, headers);
         const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual', hint);
         if (!result.found) return jsonResponse({ error: 'article not found' }, { status: 404 }, headers);
         return jsonResponse({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }, {}, headers);
-      } catch (e) { console.error(e); }
-      return jsonResponse({ queued: 0, error: 'failed' }, {}, headers);
-    }
-
-    // POST /api/retranslate-bad — bulk retranslate poor quality translations
-    if (path === '/api/retranslate-bad' && request.method === 'POST') {
-      const bad = await env.DB.prepare(`
-        SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
-        JOIN articles a ON lc.article_id = a.id
-        WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
-          lc.title LIKE '%.graphics%'
-          
-          OR lc.title GLOB '* [A-Za-z]'
-          OR lc.title GLOB '*[(/-]'
-          OR lc.title = a.title_en
-          OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
-          OR length(lc.summary) < 30
-          OR lc.summary LIKE '%_workflow_%'
-          OR lc.summary LIKE '%**%'
-          OR lc.summary LIKE '%\`%'
-          OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
-          OR lc.title LIKE '%and 및%'
-        ) LIMIT 25
-      `).all();
-      const retryIds = [];
-      for (const row of bad.results) {
-        await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-        retryIds.push(row.id);
       }
-      const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
-      return jsonResponse({ found: bad.results.length, retried }, {}, headers);
+
+      if (action === 'translate') {
+        // Bulk queue untranslated articles (backlog)
+        const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
+        const backlog = await getMissingTranslationCount(env, 'ko');
+        return jsonResponse({ queued, backlog }, {}, headers);
+      }
+
+      if (action === 'fix-bad') {
+        // Bulk retranslate poor quality translations
+        const bad = await env.DB.prepare(`
+          SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
+          JOIN articles a ON lc.article_id = a.id
+          WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
+            lc.title LIKE '%.graphics%'
+            OR lc.title GLOB '* [A-Za-z]'
+            OR lc.title GLOB '*[(/-]'
+            OR lc.title = a.title_en
+            OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
+            OR length(lc.summary) < 30
+            OR lc.summary LIKE '%_workflow_%'
+            OR lc.summary LIKE '%**%'
+            OR lc.summary LIKE '%\`%'
+            OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
+            OR lc.title LIKE '%and 및%'
+          ) LIMIT 25
+        `).all();
+        const retryIds = [];
+        for (const row of bad.results) {
+          await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
+          retryIds.push(row.id);
+        }
+        const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
+        return jsonResponse({ found: bad.results.length, retried }, {}, headers);
+      }
+
+      return jsonResponse({ error: 'invalid action' }, { status: 400 }, headers);
     }
 
     if (path === '/api/stats') {
