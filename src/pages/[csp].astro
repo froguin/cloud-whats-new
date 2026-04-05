@@ -170,44 +170,22 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
 </Layout>
 
 <script>
-  // Auto-expand card when navigated via hash anchor
-  let activeCard: HTMLElement | null = null;
-
-  function setClamp(target: ParentNode, value: string) {
-    target.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
-      el.style.webkitLineClamp = value;
-    });
-  }
-
+  // Pulse-highlight card when navigated via hash anchor
   function expandTarget() {
     const hash = window.location.hash;
     if (!hash) return;
-    if (activeCard) {
-      activeCard.classList.remove('card-active');
-      activeCard.style.outline = '';
-      activeCard.style.outlineOffset = '';
-      setClamp(activeCard, '');
-    }
     const card = document.querySelector<HTMLElement>(hash);
     if (!card) return;
-    activeCard = card;
-    setClamp(card, 'unset');
-    card.classList.add('card-active');
-    const topBorder = card.style.borderTopColor || getComputedStyle(card).borderTopColor;
-    const outlineColor = topBorder && topBorder !== 'rgba(0, 0, 0, 0)' ? topBorder : 'var(--color-primary)';
-    card.style.outline = '3px solid ' + outlineColor;
-    card.style.outlineOffset = '2px';
+    // Expand clipped text
+    card.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
+      el.style.webkitLineClamp = 'unset';
+    });
+    // Pulse animation: restart if already running
+    card.classList.remove('card-pulse');
+    void card.offsetWidth;
+    card.classList.add('card-pulse');
     setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   }
-  document.addEventListener('click', (e) => {
-    if (activeCard && !activeCard.contains(e.target as Node)) {
-      activeCard.classList.remove('card-active');
-      activeCard.style.outline = '';
-      activeCard.style.outlineOffset = '';
-      setClamp(activeCard, '');
-      activeCard = null;
-    }
-  });
   expandTarget();
   window.addEventListener('hashchange', expandTarget);
 </script>

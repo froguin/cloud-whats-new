@@ -96,17 +96,23 @@ const hasDetails = !!(target || features || regions);
 )}
 
 <style>
-  .aws-card:hover, .aws-card.card-active { border-color: #879596 !important; background: var(--color-bg) !important; }
-  .gcp-card:hover, .gcp-card.card-active { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); }
-  .azure-card:hover, .azure-card.card-active { border-color: #0078D4 !important; border-left-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
-  .aws-card:hover .line-clamp-3,
-  .gcp-card:hover .line-clamp-3,
-  .azure-card:hover .line-clamp-3,
-  .aws-card:hover .line-clamp-1,
-  .gcp-card:hover .line-clamp-1,
-  .azure-card:hover .line-clamp-1 {
+  .aws-card:hover   { border-color: #879596 !important; background: var(--color-bg) !important; }
+  .gcp-card:hover   { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); }
+  .azure-card:hover { border-color: #0078D4 !important; border-left-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
+
+  .aws-card:hover .line-clamp-3,   .aws-card:hover .line-clamp-1,
+  .gcp-card:hover .line-clamp-3,   .gcp-card:hover .line-clamp-1,
+  .azure-card:hover .line-clamp-3, .azure-card:hover .line-clamp-1 {
     -webkit-line-clamp: unset !important;
   }
+
+  /* Hash anchor pulse — amber glow, fades after 2s */
+  @keyframes card-pulse {
+    0%   { outline: 3px solid #FBBF24; outline-offset: 3px; }
+    65%  { outline: 3px solid #FBBF24; outline-offset: 3px; }
+    100% { outline: 3px solid transparent; outline-offset: 3px; }
+  }
+  .card-pulse { animation: card-pulse 2s ease-out forwards; }
 </style>
 
 <script>
