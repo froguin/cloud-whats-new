@@ -312,6 +312,10 @@ function getAuthMode(env) {
   return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
 }
 
+function isTrustedIpBypassEnabled(env) {
+  return String(env.TRUSTED_IP_BYPASS || 'off').toLowerCase() === 'on';
+}
+
 function getBearerToken(request) {
   const authHeader = request.headers.get('Authorization') || '';
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -1102,13 +1106,20 @@ export default {
       request.method === 'POST' &&
       (path === '/api/pipeline' || path === '/mcp');
     const requiresAdminIp = request.method === 'POST' && (path === '/api/pipeline');
+    const trustedIpBypass =
+      path === '/api/pipeline' &&
+      request.method === 'POST' &&
+      isTrustedIpBypassEnabled(env) &&
+      isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
       authMode = authMode === 'off' ? 'on' : authMode;
     }
 
     let authContext = { ok: false, reason: 'not_checked' };
     if (isProtectedApi) {
-      authContext = authenticateRequest(request, env);
+      authContext = trustedIpBypass
+        ? { ok: true, keyId: 'trusted-ip-bypass', keyType: 'ip' }
+        : authenticateRequest(request, env);
       if (authMode === 'warn' || authMode === 'on' || !authContext.ok) {
         logAuthResult(request, path, authContext, authMode);
       }
