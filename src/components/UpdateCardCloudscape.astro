@@ -63,7 +63,7 @@ const awsLeftBorder = statuses.length > 0
   <!-- GCP Material 3: rounded, floating, surface-tint + 4-color top border -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class="gcp-card block no-underline overflow-hidden transition-all duration-200"
-    style={`background:color-mix(in srgb, ${gcpAccent} 5%, var(--color-surface)); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent};`}>
+    style={`background:var(--color-surface); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent};`}>
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
         {isFallback && (<span class="px-1.5 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
