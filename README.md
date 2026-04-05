@@ -84,6 +84,9 @@ Cloudflare Pages (Astro SSR)
 
 - 다크모드 지원 (시스템 설정 연동 + 수동 토글)
 - CSP별 페이지: 상태 필터 (정식 출시/미리보기/베타/지원 종료), 텍스트 검색, 카드 하이라이트
+- 카드 우클릭/롱프레스: 퍼머링크·ID 복사
+- OG image (PNG 1200×630), JSON-LD 구조화 데이터
+- 동적 sitemap (`lastmod` API 연동)
 
 ## 개발
 
