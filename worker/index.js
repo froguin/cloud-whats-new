@@ -1083,15 +1083,16 @@ export default {
 
       if (rpc.method === 'tools/list') {
         return respond(rpc.id, { tools: [
-          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Returns Korean-translated summaries.', inputSchema: {
+          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
             type: 'object', properties: {
               query: { type: 'string', description: 'Search keyword (product name, feature, etc.)' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter' },
+              lang: { type: 'string', enum: ['ko', 'en'], description: 'Language: ko (Korean summary) or en (English original). Default: ko' },
               days: { type: 'number', description: 'Look back N days (default 7)' },
               limit: { type: 'number', description: 'Max results (default 10)' },
             },
           }},
-          { name: 'get_release', description: 'Get a specific release note by article ID.', inputSchema: {
+          { name: 'get_release', description: 'Get a specific release note by article ID. Returns both Korean and English.', inputSchema: {
             type: 'object', properties: { id: { type: 'number', description: 'Article ID' } }, required: ['id'],
           }},
           { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
@@ -1103,14 +1104,23 @@ export default {
 
         if (name === 'search_releases') {
           const csp = args?.csp || null;
+          const lang = args?.lang || 'ko';
           const days = args?.days || 7;
           const limit = Math.min(args?.limit || 10, 50);
           const query = args?.query || '';
-          let sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.pub_date, a.title_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
-          const params = [`-${days} days`];
-          if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
-          if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ? OR a.title_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`, `%${query}%`); }
-          sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
+          let sql, params;
+          if (lang === 'en') {
+            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE a.pub_date > datetime('now', ?)`;
+            params = [`-${days} days`];
+            if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
+            if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
+          } else {
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.pub_date, a.title_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
+            params = [`-${days} days`];
+            if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
+            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ? OR a.title_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`, `%${query}%`); }
+          }
+          sql += ' ORDER BY pub_date DESC LIMIT ?';
           params.push(limit);
           const rows = await env.DB.prepare(sql).bind(...params).all();
           return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
