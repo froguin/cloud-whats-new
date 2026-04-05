@@ -1,0 +1,41 @@
+name: Cleanup Pages Deployments (one-shot)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old deployments (keep latest 2 production)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: cloud-whats-new
+        run: |
+          # Fetch all deployments
+          DEPLOYMENTS=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/pages/projects/$PROJECT/deployments?per_page=100" \
+            -H "Authorization: Bearer $CF_TOKEN" | \
+            python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)['result']
+          # Sort by created_on descending (already sorted)
+          prod = [d for d in data if d.get('environment') == 'production']
+          preview = [d for d in data if d.get('environment') != 'production']
+          keep = {d['id'] for d in prod[:2]}
+          delete = [d['id'] for d in prod[2:]] + [d['id'] for d in preview]
+          print('KEEP:', [d['id'][:8] for d in prod[:2]])
+          print('DELETE COUNT:', len(delete))
+          for id in delete:
+              print('DELETE:', id)
+          ")
+          echo "$DEPLOYMENTS"
+
+          # Extract IDs to delete and call API
+          echo "$DEPLOYMENTS" | grep "^DELETE: " | awk '{print $2}' | while read id; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/pages/projects/$PROJECT/deployments/$id?force=true" \
+              -H "Authorization: Bearer $CF_TOKEN")
+            echo "$id → $STATUS"
+          done
