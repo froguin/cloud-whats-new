@@ -52,9 +52,12 @@ Cloudflare Pages (Astro SSR)
 |-----------|------|
 | `GET /api/articles` | 기사 조회 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
 | `GET /api/stats` | 번역/검수/큐 상태 모니터링 |
-| `POST /api/trigger` | RSS 수집 · 미번역 큐잉 · 미검수 일괄 검수 |
-| `POST /api/retranslate` | 개별 재번역 / 검수 재실행 (힌트 지원) |
-| `POST /api/retranslate-bad` | 품질 미달 일괄 재번역 |
+| `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 |
+| `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리) |
+| `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 |
+| `POST /api/pipeline?action=retranslate&id=N` | 특정 기사 재번역 (힌트 지원: `&hint=...`) |
+| `POST /api/pipeline?action=review&id=N` | 특정 기사 재검수 (힌트 지원: `&hint=...`) |
+| `POST /api/pipeline?action=fix-bad` | 품질 미달 기사 일괄 재번역 |
 | `POST /mcp` | MCP JSON-RPC 엔드포인트 |
 
 ### MCP 도구
