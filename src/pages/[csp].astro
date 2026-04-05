@@ -6,7 +6,8 @@ const { csp } = Astro.params;
 const valid = ['aws', 'gcp', 'azure'];
 if (!csp || !valid.includes(csp)) return Astro.redirect('/');
 
-const API_BASE = 'https://api.whats-new.kr';
+const siteUrl = new URL(Astro.site);
+const API_BASE = `${siteUrl.protocol}//api.${siteUrl.host}`;
 
 let articles: any[] = [];
 try {

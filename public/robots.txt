@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /api/*
-Sitemap: https://cloud-whats-new.pages.dev/sitemap.xml
+Sitemap: https://whats-new.kr/sitemap.xml

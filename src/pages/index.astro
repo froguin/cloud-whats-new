@@ -1,7 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 
-const API_BASE = 'https://api.whats-new.kr';
+const siteUrl = new URL(Astro.site);
+const API_BASE = `${siteUrl.protocol}//api.${siteUrl.host}`;
 
 const csps = [
   { id: 'aws', name: 'Amazon Web Services', color: '#FF9900', accent: '#232F3E', font: "'Amazon Ember', sans-serif" },

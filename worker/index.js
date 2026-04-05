@@ -248,6 +248,21 @@ function jsonResponse(body, init = {}, extraHeaders = {}) {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
+function buildAlertWebhookPayload(webhookUrl, message) {
+  let host = '';
+  try {
+    host = new URL(webhookUrl).hostname.toLowerCase();
+  } catch {
+    return { content: message };
+  }
+
+  if (host.includes('slack.com')) {
+    return { text: message };
+  }
+
+  return { content: message };
+}
+
 function getCorsOrigin(request, env) {
   const requestOrigin = request.headers.get('Origin');
   const siteOrigin = env.SITE_URL || 'https://whats-new.kr';
@@ -978,9 +993,10 @@ export default {
       if (webhookUrl && n.newArticles === 0) {
         const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
         if (prev && prev.c === 0) {
+          const alertMessage = `⚠️ What's New: 3시간 연속 새 기사 없음. RSS 피드 확인 필요.`;
           await fetch(webhookUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: `⚠️ What's New: 3시간 연속 새 기사 없음. RSS 피드 확인 필요.` }),
+            body: JSON.stringify(buildAlertWebhookPayload(webhookUrl, alertMessage)),
           }).catch(() => {});
         }
       }
