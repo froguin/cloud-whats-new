@@ -50,13 +50,56 @@ function getArticleStatuses(a: any): string {
 }
 
 const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts['번역 준비중'] ? ['번역 준비중'] : [])];
+const categoryUrl = new URL(`/${csp}`, Astro.site).toString();
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `${names[csp]} 업데이트 | What's New 한국어 요약`,
+    url: categoryUrl,
+    inLanguage: 'ko-KR',
+    description: `${names[csp]} 공식 업데이트를 한국어로 요약한 최신 릴리스 노트 목록입니다.`,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'What\'s New 한국어 요약',
+        item: new URL('/', Astro.site).toString(),
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: names[csp],
+        item: categoryUrl,
+      },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `${names[csp]} 최신 업데이트`,
+    itemListElement: articles.slice(0, 10).map((a, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: a.title,
+      url: a.url,
+      datePublished: a.pub_date,
+    })),
+  },
+];
 
 ---
 
 <Layout
-  title={`${csp.toUpperCase()} What's New`}
-  description={`${names[csp]} 공식 업데이트를 한국어로 요약한 최신 릴리스 노트 목록입니다.`}
+  title={`${names[csp]} 업데이트 | What's New 한국어 요약`}
+  description={`${names[csp]} 공식 업데이트를 빠르게 훑어볼 수 있도록 한국어로 정리한 최신 릴리스 노트 목록입니다.`}
   vendor={csp}
+  ogImageAlt={`${names[csp]} 공식 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지`}
+  structuredData={structuredData}
 >
   <div class="mb-4 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
     style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius);">
@@ -76,6 +119,8 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
           {activeStatusFilters.map(s => (
             <button
               class="filter-btn text-xs px-2.5 py-1 rounded-full font-medium border transition-all"
+              type="button"
+              aria-pressed="false"
               data-filter={s}>
               {s}<span class="ml-1 opacity-60">{statusCounts[s]}</span>
             </button>
@@ -133,6 +178,7 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
         activeFilter = activeFilter === f ? '' : f;
         document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
           b.classList.toggle('is-active', b.dataset.filter === activeFilter && activeFilter !== '');
+          b.setAttribute('aria-pressed', b.dataset.filter === activeFilter && activeFilter !== '' ? 'true' : 'false');
         });
         applyFilters();
       });

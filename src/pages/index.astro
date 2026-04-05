@@ -17,12 +17,44 @@ for (const c of csps) {
     data[c.id] = (await res.json()).items || [];
   } catch { data[c.id] = []; }
 }
+
+const structuredData = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'What\'s New 한국어 요약',
+    url: Astro.site?.toString(),
+    inLanguage: 'ko-KR',
+    description: 'AWS, Google Cloud, Microsoft Azure의 최신 업데이트를 한국어로 요약한 클라우드 릴리스 노트 사이트입니다.',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: '클라우드 최신 업데이트 | What\'s New 한국어 요약',
+    url: new URL('/', Astro.site).toString(),
+    inLanguage: 'ko-KR',
+    description: 'AWS, Google Cloud, Microsoft Azure의 최신 업데이트를 한국어로 요약해 보여주는 클라우드 릴리스 노트 대시보드입니다.',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: '클라우드 공급자 목록',
+    itemListElement: csps.map((c, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: c.name,
+      url: new URL(`/${c.id}`, Astro.site).toString(),
+    })),
+  },
+];
 ---
 
 <Layout
-  title="What's New — 클라우드 최신 업데이트"
-  description="AWS, Google Cloud, Microsoft Azure의 최신 업데이트를 한국어로 요약해 보여주는 클라우드 릴리스 노트 대시보드입니다."
+  title="클라우드 최신 업데이트 | What's New 한국어 요약"
+  description="AWS, Google Cloud, Microsoft Azure의 공식 업데이트를 읽기 쉬운 한국어 카드로 정리한 클라우드 릴리스 노트 대시보드입니다."
   vendor="home"
+  ogImageAlt="AWS, Google Cloud, Microsoft Azure 최신 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지"
+  structuredData={structuredData}
 >
   <!-- Hero -->
   <div class="text-center py-6 sm:py-16 mb-6">

@@ -6,17 +6,25 @@ interface Props {
   title: string;
   description?: string;
   vendor?: string;
+  ogImage?: string;
+  ogImageAlt?: string;
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
 const {
   title,
   description = 'Amazon Web Services, Google Cloud, Microsoft Azure 클라우드 최신 업데이트를 한국어로 요약합니다.',
   vendor = 'home',
+  ogImage = '/og.png',
+  ogImageAlt = 'What\'s New 한국어 요약 공유 이미지',
+  structuredData = [],
 } = Astro.props;
 const cspNames: Record<string, string> = { home: 'Cloud What\'s New', aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
 const cspColors: Record<string, string> = { aws: '#FF9900', gcp: '#1A73E8', azure: '#0078D4' };
+const siteName = 'What\'s New 한국어 요약';
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).toString();
-const ogImageUrl = new URL('/og.svg', Astro.site).toString();
+const ogImageUrl = new URL(ogImage, Astro.site).toString();
+const structuredDataItems = Array.isArray(structuredData) ? structuredData : [structuredData];
 ---
 
 <!DOCTYPE html>
@@ -27,22 +35,32 @@ const ogImageUrl = new URL('/og.svg', Astro.site).toString();
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Open+Sans:wght@400;600;700&family=Roboto+Flex:wght@400;500;700&family=Inter:wght@400;600;700&display=swap" media="print" onload="this.media='all'" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" media="print" onload="this.media='all'" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="theme-color" content={vendor === 'aws' ? '#232F3E' : vendor === 'gcp' ? '#1A73E8' : vendor === 'azure' ? '#0078D4' : '#0F172A'} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
+    <meta property="og:site_name" content={siteName} />
     <meta property="og:type" content="website" />
     <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:url" content={canonicalUrl} />
     <link rel="canonical" href={canonicalUrl} />
     <meta property="og:locale" content="ko_KR" />
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+    {structuredDataItems.filter(Boolean).map((item) => (
+      <script type="application/ld+json" set:html={JSON.stringify(item)} />
+    ))}
   </head>
   <body style="background-color: var(--color-bg); color: var(--color-text-primary); font-family: var(--font-family);" class="transition-colors duration-200">
     <header style={`background-color: var(--nav-bg); height: var(--nav-height); border-bottom: 1px solid var(--color-border);`}>
@@ -60,7 +78,7 @@ const ogImageUrl = new URL('/og.svg', Astro.site).toString();
               {cspNames[c]}
             </a>
           ))}
-          <button id="theme-toggle" class="ml-2 p-1.5 rounded transition-colors" style={`color: ${vendor === 'aws' || vendor === 'home' ? '#D1D5DB' : 'var(--color-text-secondary)'};`}>
+          <button id="theme-toggle" type="button" aria-label="다크 모드 전환" aria-pressed="false" class="ml-2 p-1.5 rounded transition-colors" style={`color: ${vendor === 'aws' || vendor === 'home' ? '#D1D5DB' : 'var(--color-text-secondary)'};`}>
             <svg id="icon-dark" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
             <svg id="icon-light" class="hidden w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
           </button>
@@ -87,6 +105,7 @@ const ogImageUrl = new URL('/og.svg', Astro.site).toString();
           const dark = html.hasAttribute('data-theme');
           iconDark.classList.toggle('hidden', dark);
           iconLight.classList.toggle('hidden', !dark);
+          document.getElementById('theme-toggle')?.setAttribute('aria-pressed', dark ? 'true' : 'false');
         }
         updateIcons();
         document.getElementById('theme-toggle').addEventListener('click', () => {
