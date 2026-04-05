@@ -119,11 +119,82 @@ const hasDetails = !!(target || features || regions);
 </style>
 
 <script>
-  // Mobile: first tap expands, second tap navigates
+  // Context menu: permalink copy (desktop right-click, mobile long-press)
+  const ctxMenu = document.createElement('div');
+  ctxMenu.id = 'card-ctx-menu';
+  ctxMenu.innerHTML = '<button id="ctx-copy-link">🔗 퍼머링크 복사</button><button id="ctx-copy-id">📋 ID 복사</button>';
+  ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:140px;';
+  ctxMenu.querySelectorAll('button').forEach(b => b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--color-text-primary);border-radius:4px;');
+  ctxMenu.querySelectorAll('button').forEach(b => { b.onmouseenter = () => b.style.background = 'var(--color-border)'; b.onmouseleave = () => b.style.background = 'none'; });
+  document.body.appendChild(ctxMenu);
+
+  let ctxTarget: { permalink: string; id: string } | null = null;
+
+  function showCtxMenu(x: number, y: number, permalink: string, id: string) {
+    ctxTarget = { permalink, id };
+    const mw = ctxMenu.offsetWidth || 160;
+    const mh = ctxMenu.offsetHeight || 80;
+    ctxMenu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
+    ctxMenu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+    ctxMenu.style.display = 'block';
+  }
+
+  function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxTarget = null; }
+
+  function showToast(msg: string) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10000;opacity:0;transition:opacity .2s;';
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.style.opacity = '1');
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 200); }, 1500);
+  }
+
+  async function copyText(text: string, label: string) {
+    try { await navigator.clipboard.writeText(text); showToast(`${label} 복사됨`); }
+    catch { showToast('복사 실패'); }
+    hideCtxMenu();
+  }
+
+  document.getElementById('ctx-copy-link')!.addEventListener('click', () => ctxTarget && copyText(ctxTarget.permalink, '퍼머링크'));
+  document.getElementById('ctx-copy-id')!.addEventListener('click', () => ctxTarget && copyText(ctxTarget.id, 'ID'));
+  document.addEventListener('click', (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); });
+
+  function getCardInfo(card: HTMLElement) {
+    const id = card.id?.replace('article-', '') || '';
+    const csp = window.location.pathname.replace('/', '') || 'aws';
+    const permalink = `${window.location.origin}/${csp}#${card.id}`;
+    return { id, permalink };
+  }
+
+  // Desktop: right-click
+  document.querySelectorAll<HTMLElement>('.aws-card,.gcp-card,.azure-card').forEach(card => {
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const info = getCardInfo(card);
+      showCtxMenu(e.clientX, e.clientY, info.permalink, info.id);
+    });
+  });
+
+  // Mobile: long-press (500ms) + first tap expands, second tap navigates
+  let longPressTimer: ReturnType<typeof setTimeout>;
   if ('ontouchstart' in window) {
     document.querySelectorAll<HTMLAnchorElement>('.aws-card,.gcp-card,.azure-card').forEach((card) => {
       let expanded = false;
+      let longPressed = false;
+      card.addEventListener('touchstart', (e) => {
+        longPressed = false;
+        longPressTimer = setTimeout(() => {
+          longPressed = true;
+          const touch = e.touches[0];
+          const info = getCardInfo(card);
+          showCtxMenu(touch.clientX, touch.clientY, info.permalink, info.id);
+        }, 500);
+      }, { passive: true });
+      card.addEventListener('touchend', () => clearTimeout(longPressTimer));
+      card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
       card.addEventListener('click', (e) => {
+        if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
         if (!expanded) {
           e.preventDefault();
           card.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
@@ -131,7 +202,6 @@ const hasDetails = !!(target || features || regions);
           });
           expanded = true;
         }
-        // second tap: default link behavior
       });
     });
   }
