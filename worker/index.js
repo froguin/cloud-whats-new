@@ -1115,10 +1115,10 @@ export default {
             if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
           } else {
-            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.pub_date, a.title_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
             params = [`-${days} days`];
             if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
-            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ? OR a.title_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`, `%${query}%`); }
+            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
           }
           sql += ' ORDER BY pub_date DESC LIMIT ?';
           params.push(limit);
