@@ -49,9 +49,21 @@ function getArticleStatuses(a: any): string {
 }
 
 const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts['번역 준비중'] ? ['번역 준비중'] : [])];
+
+const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+  '정식 출시':  { bg: '#dcfce7', color: '#166534', border: '#16a34a' },
+  '미리보기':   { bg: '#dbeafe', color: '#1e40af', border: '#3b82f6' },
+  '베타':       { bg: '#f3e8ff', color: '#6b21a8', border: '#a855f7' },
+  '지원 종료':  { bg: '#fee2e2', color: '#991b1b', border: '#ef4444' },
+  '번역 준비중':{ bg: '#fef3c7', color: '#92400e', border: '#f59e0b' },
+};
 ---
 
-<Layout title={`${csp.toUpperCase()} What's New`} vendor={csp}>
+<Layout
+  title={`${csp.toUpperCase()} What's New`}
+  description={`${names[csp]} 공식 업데이트를 한국어로 요약한 최신 릴리스 노트 목록입니다.`}
+  vendor={csp}
+>
   <div class="mb-4 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
     style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius);">
     <div class="flex flex-col gap-1">
@@ -64,21 +76,27 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
         </span>
       )}
     </div>
-    <div class="flex flex-col gap-2 items-stretch sm:items-end shrink-0">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0">
       {activeStatusFilters.length > 0 && (
         <div class="flex flex-wrap gap-1.5" id="filter-bar">
-          {activeStatusFilters.map(s => (
-            <button
-              class="filter-btn text-xs px-2.5 py-1 rounded-full font-medium border transition-colors"
-              data-filter={s}
-              style="border-color: var(--color-border); color: var(--color-text-secondary); background: var(--color-surface); cursor: pointer;">
-              {s}<span class="ml-1 opacity-60 filter-count">{statusCounts[s]}</span>
-            </button>
-          ))}
+          {activeStatusFilters.map(s => {
+            const st = STATUS_STYLE[s] || { bg: '#f3f4f6', color: '#374151', border: '#9ca3af' };
+            return (
+              <button
+                class="filter-btn text-xs px-2.5 py-1 rounded-full font-medium border transition-colors"
+                data-filter={s}
+                data-bg={st.bg}
+                data-color={st.color}
+                data-border={st.border}
+                style={`border-color: ${st.border}; color: ${st.color}; background: transparent; cursor: pointer;`}>
+                {s}<span class="ml-1 opacity-60">{statusCounts[s]}</span>
+              </button>
+            );
+          })}
         </div>
       )}
       <input type="text" id="search" placeholder="검색..."
-        class="w-full sm:w-72 px-4 py-2 text-sm rounded outline-none transition-colors"
+        class="w-full sm:w-56 px-4 py-2 text-sm rounded outline-none transition-colors"
         style="border: 2px solid var(--color-border); background: var(--color-surface); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); color: var(--color-text-primary); border-radius: var(--radius);" />
     </div>
   </div>
@@ -90,7 +108,7 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
           title={a.title} csp={a.csp} index={i}
           date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
           content={a.summary || ''} target={a.target} features={a.features}
-          regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} originalTitle={a.original_title} articleId={a.article_id} />
+          regions={a.regions} status={a.status} originalLink={a.url} isFallback={!!a.is_fallback} articleId={a.article_id} />
       </div>
     ))}
   </div>
@@ -128,10 +146,10 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
         activeFilter = activeFilter === f ? '' : f;
         document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
           const on = b.dataset.filter === activeFilter && activeFilter !== '';
-          b.style.borderColor = on ? 'var(--color-primary)' : 'var(--color-border)';
-          b.style.color = on ? 'var(--color-primary)' : 'var(--color-text-secondary)';
-          b.style.background = on ? 'color-mix(in srgb, var(--color-primary) 12%, transparent)' : 'var(--color-surface)';
-          b.style.fontWeight = on ? '700' : '';
+          b.style.background = on ? (b.dataset.bg || 'transparent') : 'transparent';
+          b.style.borderColor = b.dataset.border || 'var(--color-border)';
+          b.style.color = b.dataset.color || 'var(--color-text-secondary)';
+          b.style.fontWeight = on ? '700' : '500';
         });
         applyFilters();
       });
@@ -142,6 +160,13 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
 <script>
   // Auto-expand card when navigated via hash anchor
   let activeCard: HTMLElement | null = null;
+
+  function setClamp(target: ParentNode, value: string) {
+    target.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
+      el.style.webkitLineClamp = value;
+    });
+  }
+
   function expandTarget() {
     const hash = window.location.hash;
     if (!hash) return;
@@ -149,16 +174,12 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
       activeCard.classList.remove('card-active');
       activeCard.style.outline = '';
       activeCard.style.outlineOffset = '';
-      activeCard.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
-        (el as HTMLElement).style.webkitLineClamp = '';
-      });
+      setClamp(activeCard, '');
     }
-    const card = document.querySelector(hash) as HTMLElement | null;
+    const card = document.querySelector<HTMLElement>(hash);
     if (!card) return;
     activeCard = card;
-    card.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
-      (el as HTMLElement).style.webkitLineClamp = 'unset';
-    });
+    setClamp(card, 'unset');
     card.classList.add('card-active');
     const topBorder = card.style.borderTopColor || getComputedStyle(card).borderTopColor;
     const outlineColor = topBorder && topBorder !== 'rgba(0, 0, 0, 0)' ? topBorder : 'var(--color-primary)';
@@ -171,9 +192,7 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
       activeCard.classList.remove('card-active');
       activeCard.style.outline = '';
       activeCard.style.outlineOffset = '';
-      activeCard.querySelectorAll('.line-clamp-3,.line-clamp-1').forEach(el => {
-        (el as HTMLElement).style.webkitLineClamp = '';
-      });
+      setClamp(activeCard, '');
       activeCard = null;
     }
   });
