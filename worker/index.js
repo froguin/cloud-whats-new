@@ -318,9 +318,7 @@ function isTrustedIpBypassEnabled(env) {
 
 function getBearerToken(request) {
   const authHeader = request.headers.get('Authorization') || '';
-  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  const legacyToken = request.headers.get('X-Admin-Token') || '';
-  return bearerToken || legacyToken;
+  return authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 }
 
 function authenticateRequest(request, env) {
@@ -907,14 +905,9 @@ async function persistTranslationRecord(env, row, record, modelUsed, { isReview 
 
 async function runReviewPipeline(env, row, hint = '') {
   const existing = await env.DB.prepare(
-    'SELECT title, summary, target, features, regions, status, translated_at, model_used FROM localized_content WHERE article_id = ? AND lang = ?'
+    'SELECT title, summary, target, features, regions, status FROM localized_content WHERE article_id = ? AND lang = ?'
   ).bind(row.id, 'ko').first();
   if (!existing) return { ok: false };
-  // No translated_at = legacy → full retranslation
-  if (!existing.translated_at) {
-    await env.DB.prepare('DELETE FROM localized_content WHERE article_id = ? AND lang = ?').bind(row.id, 'ko').run();
-    return runTranslationPipeline(env, row, 'backlog', hint);
-  }
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record, hint);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
@@ -1094,7 +1087,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Admin-Token',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     };
     const headers = { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' };
 

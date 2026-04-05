@@ -69,7 +69,7 @@ Cloudflare Pages (Astro SSR)
 
 ### 인증
 
-- POST API와 MCP는 `Authorization: Bearer <token>` 또는 `X-Admin-Token: <token>` 헤더 사용
+- POST API와 MCP는 `Authorization: Bearer <token>` 헤더 사용
 - `/mcp`는 항상 인증 필수
 - `retranslate` 계열은 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서만 처리
 
