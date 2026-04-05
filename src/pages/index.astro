@@ -10,17 +10,12 @@ const csps = [
 ];
 
 const data: Record<string, any[]> = {};
-let latestDate = '';
 for (const c of csps) {
   try {
     const res = await fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=30`);
     data[c.id] = (await res.json()).items || [];
-    for (const a of data[c.id]) {
-      if (a.pub_date && a.pub_date > latestDate) latestDate = a.pub_date;
-    }
   } catch { data[c.id] = []; }
 }
-const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
 ---
 
 <Layout
@@ -36,11 +31,6 @@ const lastUpdated = latestDate ? new Date(latestDate).toLocaleDateString('ko-KR'
     <p class="text-sm sm:text-lg" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
       Amazon Web Services · Google Cloud · Microsoft Azure<br/>클라우드 최신 업데이트를 한국어로 요약합니다
     </p>
-    {lastUpdated && (
-      <p class="mt-3 text-xs sm:text-sm" style="color: var(--color-text-secondary); font-family: 'Pretendard Variable', var(--font-family);">
-        최근 반영일: {lastUpdated}
-      </p>
-    )}
   </div>
 
   <!-- 3-column layout -->
