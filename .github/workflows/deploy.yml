@@ -15,7 +15,16 @@ jobs:
           fetch-depth: 0
       - id: filter
         run: |
-          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          BEFORE_SHA="${{ github.event.before }}"
+          AFTER_SHA="${{ github.sha }}"
+
+          if [ -n "$BEFORE_SHA" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            CHANGED=$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")
+          else
+            echo "before SHA is unavailable in this checkout; falling back to changed files in the pushed commit"
+            CHANGED=$(git diff-tree --no-commit-id --name-only -r "$AFTER_SHA")
+          fi
+
           echo "worker=$(echo "$CHANGED" | grep -qE '^(worker/|wrangler\.toml|schema\.sql)' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "pages=$(echo "$CHANGED" | grep -qE '^(src/|public/|package|astro\.config)' && echo true || echo false)" >> $GITHUB_OUTPUT
 
