@@ -57,7 +57,22 @@ const FEW_SHOT = [
 
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
-let translationJobStateReady = false;
+function buildBadQualityFilter() {
+  return `
+    lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
+      lc.title LIKE '%.graphics%'
+      OR lc.title GLOB '* [A-Za-z]'
+      OR lc.title GLOB '*[(/-]'
+      OR lc.title = a.title_en
+      OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
+      OR length(lc.summary) < 30
+      OR lc.summary LIKE '%_workflow_%'
+      OR lc.summary LIKE '%**%'
+      OR lc.summary LIKE '%\`%'
+      OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
+      OR lc.title LIKE '%and 및%'
+    )`;
+}
 
 const REGION_DISPLAY_MAP = {
   aws: {
@@ -100,7 +115,7 @@ const REGION_DISPLAY_MAP = {
     'New Zealand North': '뉴질랜드 북부',
     'Korea Central': '한국 중부',
     'Korea South': '한국 남부',
-    'Japan East': '일본 동부',
+let translationJobStateReady = false;    'Japan East': '일본 동부',
     'Japan West': '일본 서부',
     'Australia East': '오스트레일리아 동부',
     'Australia Southeast': '오스트레일리아 남동부',
@@ -1115,11 +1130,6 @@ export default {
       }
 
       if (action === 'review') {
-        if (id) {
-          // Re-review a single article with an optional hint
-          await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
-          return jsonResponse({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }, {}, headers);
-        }
         // Bulk queue unreviewed articles
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '25'), 100);
         const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY a.created_at DESC LIMIT ?').bind('ko', limit).all();
@@ -1130,9 +1140,14 @@ export default {
 
       if (action === 'retranslate') {
         if (!id) return jsonResponse({ error: 'id required for retranslate' }, { status: 400 }, headers);
+        const mode = url.searchParams.get('mode') || 'translate';
+        if (mode === 'review') {
+          await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
+          return jsonResponse({ queued: 1, articleId: Number(id), mode: 'review', hint: hint || undefined }, {}, headers);
+        }
         const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual', hint);
         if (!result.found) return jsonResponse({ error: 'article not found' }, { status: 404 }, headers);
-        return jsonResponse({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }, {}, headers);
+        return jsonResponse({ queued: result.queued, articleId: Number(id), mode: 'translate', hint: hint || undefined }, {}, headers);
       }
 
       if (action === 'translate') {
@@ -1143,23 +1158,10 @@ export default {
       }
 
       if (action === 'fix-bad') {
-        // Bulk retranslate poor quality translations
         const bad = await env.DB.prepare(`
-          SELECT a.id, a.csp, a.url, a.pub_date, a.title_en, a.description_en FROM localized_content lc
+          SELECT a.id FROM localized_content lc
           JOIN articles a ON lc.article_id = a.id
-          WHERE lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
-            lc.title LIKE '%.graphics%'
-            OR lc.title GLOB '* [A-Za-z]'
-            OR lc.title GLOB '*[(/-]'
-            OR lc.title = a.title_en
-            OR substr(lc.summary, 1, 20) = substr(lc.title, 1, 20)
-            OR length(lc.summary) < 30
-            OR lc.summary LIKE '%_workflow_%'
-            OR lc.summary LIKE '%**%'
-            OR lc.summary LIKE '%\`%'
-            OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
-            OR lc.title LIKE '%and 및%'
-          ) LIMIT 25
+          WHERE ${buildBadQualityFilter()} LIMIT 25
         `).all();
         const retryIds = [];
         for (const row of bad.results) {
