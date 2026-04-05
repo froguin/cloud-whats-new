@@ -75,7 +75,7 @@ const hasDetails = !!(target || features || regions);
   <!-- Azure Fluent 2: spacious, shadow depth, left accent -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class="azure-card block no-underline overflow-hidden transition-all duration-200"
-    style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3px solid #0078D4; border-radius:4px; box-shadow:var(--card-shadow);">
+    style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-3 flex-wrap">
         {isFallback && (<span class="px-1.5 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
