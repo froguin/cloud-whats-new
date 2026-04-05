@@ -60,6 +60,7 @@ Cloudflare Pages (Astro SSR)
 
 제어용 POST API와 MCP는 `Authorization: Bearer <token>` 또는 `X-Admin-Token: <token>` 헤더를 사용할 수 있습니다.
 초기 마이그레이션 기간에는 `AUTH_ENFORCEMENT=warn` 으로 비인증 요청도 허용하면서 로그만 남기고, 전환 확인 후 `on` 으로 바꿉니다.
+`/mcp` 는 항상 인증이 필요하도록 강제하고, `retranslate` 계열은 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서도만 처리합니다.
 
 ## 디자인 시스템
 
@@ -93,6 +94,9 @@ GitHub Actions (`push → main`):
 
 운영 시 추가 시크릿:
 - `API_KEY_RING`: 서비스/MCP용 Bearer 토큰 목록 JSON
+
+운영 변수:
+- `ALLOWED_ADMIN_IPS`: `retranslate` 계열 관리 호출을 허용할 공인 IP 목록 (쉼표 구분)
 
 예시:
 ```json

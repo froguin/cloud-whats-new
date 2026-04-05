@@ -292,6 +292,20 @@ function logAuthResult(request, path, auth, mode) {
   console.warn(`[auth] ${auth.reason} mode=${mode} path=${path} ua="${ua}"`);
 }
 
+function getAllowedAdminIps(env) {
+  return (env.ALLOWED_ADMIN_IPS || '')
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+}
+
+function isAllowedAdminIp(request, env) {
+  const allowedIps = getAllowedAdminIps(env);
+  if (allowedIps.length === 0) return true;
+  const currentIp = request.headers.get('CF-Connecting-IP') || '';
+  return allowedIps.includes(currentIp);
+}
+
 function parseRSS(xml, csp) {
   const items = [];
   const isAtom = !xml.includes('<item>') && xml.includes('<entry>');
@@ -1022,7 +1036,7 @@ export default {
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const url = new URL(request.url);
     const path = url.pathname;
-    const authMode = getAuthMode(env);
+    let authMode = getAuthMode(env);
     const corsOrigin = getCorsOrigin(request, env);
     const corsHeaders = {
       'Access-Control-Allow-Origin': corsOrigin,
@@ -1038,6 +1052,10 @@ export default {
     const isProtectedApi =
       request.method === 'POST' &&
       (path === '/api/trigger' || path === '/api/retranslate' || path === '/api/retranslate-bad' || path === '/mcp');
+    const requiresAdminIp = request.method === 'POST' && (path === '/api/retranslate' || path === '/api/retranslate-bad');
+    if (path === '/mcp' && request.method === 'POST') {
+      authMode = authMode === 'off' ? 'on' : authMode;
+    }
 
     let authContext = { ok: false, reason: 'not_checked' };
     if (isProtectedApi) {
@@ -1051,6 +1069,11 @@ export default {
           ? 'API_KEY_RING is not configured'
           : 'Unauthorized';
         return jsonResponse({ error: message }, { status }, headers);
+      }
+      if (requiresAdminIp && authContext.ok && !isAllowedAdminIp(request, env)) {
+        const currentIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        console.warn(`[auth] forbidden_ip path=${path} ip=${currentIp}`);
+        return jsonResponse({ error: 'Forbidden IP' }, { status: 403 }, headers);
       }
     }
 

@@ -35,12 +35,14 @@ ALERT_WEBHOOK_URL = ""
 SITE_URL = "https://whats-new.kr"
 BACKLOG_QUEUE_BATCH_SIZE = "25"
 AUTH_ENFORCEMENT = "warn"
+ALLOWED_ADMIN_IPS = "211.207.226.107"
 
 
 [env.production.vars]
 SITE_URL = "https://whats-new.kr"
 BACKLOG_QUEUE_BATCH_SIZE = "25"
 AUTH_ENFORCEMENT = "warn"
+ALLOWED_ADMIN_IPS = "211.207.226.107"
 
 routes = [
   { pattern = "api.whats-new.kr", custom_domain = true }
