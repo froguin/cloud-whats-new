@@ -56,6 +56,10 @@ Cloudflare Pages (Astro SSR)
 | `POST /api/retranslate?id=N&hint=...` | 힌트 포함 재번역 |
 | `POST /api/retranslate?id=N&action=review&hint=...` | 검수만 재실행 + 힌트 |
 | `POST /api/retranslate-bad` | 품질 미달 일괄 재번역 |
+| `POST /mcp` | MCP JSON-RPC 엔드포인트 |
+
+제어용 POST API와 MCP는 `Authorization: Bearer <token>` 또는 `X-Admin-Token: <token>` 헤더를 사용할 수 있습니다.
+초기 마이그레이션 기간에는 `AUTH_ENFORCEMENT=warn` 으로 비인증 요청도 허용하면서 로그만 남기고, 전환 확인 후 `on` 으로 바꿉니다.
 
 ## 디자인 시스템
 
@@ -86,3 +90,15 @@ GitHub Actions (`push → main`):
 - `src/` 변경 → Pages 빌드+배포
 
 필요 시크릿: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+
+운영 시 추가 시크릿:
+- `API_KEY_RING`: 서비스/MCP용 Bearer 토큰 목록 JSON
+
+예시:
+```json
+[
+  { "id": "service-current", "type": "service", "token": "wnk_srv_..." },
+  { "id": "service-next", "type": "service", "token": "wnk_srv_..." },
+  { "id": "mcp-primary", "type": "mcp", "token": "wnk_mcp_..." }
+]
+```

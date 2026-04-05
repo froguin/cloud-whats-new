@@ -223,6 +223,75 @@ function getEnvInt(env, key, fallback, min = 1, max = 200) {
   return Math.max(min, Math.min(max, value));
 }
 
+function jsonResponse(body, init = {}, extraHeaders = {}) {
+  const headers = new Headers(init.headers || {});
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    headers.set(key, value);
+  }
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  return new Response(JSON.stringify(body), { ...init, headers });
+}
+
+function getCorsOrigin(request, env) {
+  const requestOrigin = request.headers.get('Origin');
+  const siteOrigin = env.SITE_URL || 'https://whats-new.kr';
+  if (!requestOrigin || requestOrigin === siteOrigin) return siteOrigin;
+  return siteOrigin;
+}
+
+function parseApiKeyRing(env) {
+  const raw = env.API_KEY_RING || '';
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => ({
+        id: String(entry.id || ''),
+        type: String(entry.type || 'service'),
+        token: String(entry.token || ''),
+      }))
+      .filter((entry) => entry.id && entry.token);
+  } catch (error) {
+    console.error('Failed to parse API_KEY_RING:', error.message);
+    return [];
+  }
+}
+
+function getAuthMode(env) {
+  const mode = (env.AUTH_ENFORCEMENT || 'warn').toLowerCase();
+  return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
+}
+
+function getBearerToken(request) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const legacyToken = request.headers.get('X-Admin-Token') || '';
+  return bearerToken || legacyToken;
+}
+
+function authenticateRequest(request, env) {
+  const token = getBearerToken(request);
+  const keyRing = parseApiKeyRing(env);
+  if (keyRing.length === 0) return { ok: false, reason: 'missing_key_ring' };
+  if (!token) return { ok: false, reason: 'missing_header' };
+
+  const key = keyRing.find((entry) => entry.token === token);
+  if (!key) return { ok: false, reason: 'invalid_token' };
+
+  return { ok: true, keyId: key.id, keyType: key.type };
+}
+
+function logAuthResult(request, path, auth, mode) {
+  const ua = request.headers.get('User-Agent') || 'unknown';
+  if (auth.ok) {
+    console.log(`[auth] ok mode=${mode} path=${path} keyId=${auth.keyId} keyType=${auth.keyType} ua="${ua}"`);
+    return;
+  }
+  console.warn(`[auth] ${auth.reason} mode=${mode} path=${path} ua="${ua}"`);
+}
+
 function parseRSS(xml, csp) {
   const items = [];
   const isAtom = !xml.includes('<item>') && xml.includes('<entry>');
@@ -953,7 +1022,37 @@ export default {
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const url = new URL(request.url);
     const path = url.pathname;
-    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://whats-new.kr', 'Cache-Control': 'public, max-age=3600' };
+    const authMode = getAuthMode(env);
+    const corsOrigin = getCorsOrigin(request, env);
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Admin-Token',
+    };
+    const headers = { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    const isProtectedApi =
+      request.method === 'POST' &&
+      (path === '/api/trigger' || path === '/api/retranslate' || path === '/api/retranslate-bad' || path === '/mcp');
+
+    let authContext = { ok: false, reason: 'not_checked' };
+    if (isProtectedApi) {
+      authContext = authenticateRequest(request, env);
+      if (authMode === 'warn' || authMode === 'on' || !authContext.ok) {
+        logAuthResult(request, path, authContext, authMode);
+      }
+      if (authMode === 'on' && !authContext.ok) {
+        const status = authContext.reason === 'missing_key_ring' ? 503 : 401;
+        const message = authContext.reason === 'missing_key_ring'
+          ? 'API_KEY_RING is not configured'
+          : 'Unauthorized';
+        return jsonResponse({ error: message }, { status }, headers);
+      }
+    }
 
     if (path === '/api/articles') {
       const csp = url.searchParams.get('csp');
@@ -978,7 +1077,7 @@ export default {
       query += ' ORDER BY pub_date DESC LIMIT ?';
       params.push(limit);
       const rows = await env.DB.prepare(query).bind(...params).all();
-      return new Response(JSON.stringify({ items: rows.results, count: rows.results.length, lang }), { headers });
+      return jsonResponse({ items: rows.results, count: rows.results.length, lang }, {}, headers);
     }
 
     if (path === '/api/trigger' && request.method === 'POST') {
@@ -986,37 +1085,37 @@ export default {
       if (action === 'fetch') {
         const n = await fetchRSS(env);
         const backlog = await getMissingTranslationCount(env, 'ko');
-        return new Response(JSON.stringify({ newArticles: n.newArticles, queued: n.queued, backlog }), { headers });
+        return jsonResponse({ newArticles: n.newArticles, queued: n.queued, backlog }, {}, headers);
       }
       if (action === 'review') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '25'), 100);
         const rows = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY a.created_at DESC LIMIT ?').bind('ko', limit).all();
         const jobs = rows.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
         const queued = await enqueueTranslationJobs(env, jobs, { skipClaim: true });
-        return new Response(JSON.stringify({ queued, total: rows.results.length }), { headers });
+        return jsonResponse({ queued, total: rows.results.length }, {}, headers);
       }
       const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       const backlog = await getMissingTranslationCount(env, 'ko');
-      return new Response(JSON.stringify({ queued, backlog }), { headers });
+      return jsonResponse({ queued, backlog }, {}, headers);
     }
 
     // POST /api/retranslate?id=123&hint=...&action=review|translate
     if (path === '/api/retranslate' && request.method === 'POST') {
       const id = url.searchParams.get('id');
-      if (!id) return new Response(JSON.stringify({ error: 'id required' }), { status: 400, headers });
+      if (!id) return jsonResponse({ error: 'id required' }, { status: 400 }, headers);
       const hint = url.searchParams.get('hint') || '';
       const action = url.searchParams.get('action') || 'translate';
       try {
         if (action === 'review') {
           // Review only — keep translation, re-review with hint
           await enqueueTranslationJobs(env, [{ articleId: Number(id), lang: 'ko', action: 'review', hint }], { skipClaim: true });
-          return new Response(JSON.stringify({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }), { headers });
+          return jsonResponse({ queued: 1, articleId: Number(id), action: 'review', hint: hint || undefined }, {}, headers);
         }
         const result = await queueArticleRetranslation(env, Number(id), 'ko', 'manual', hint);
-        if (!result.found) return new Response(JSON.stringify({ error: 'article not found' }), { status: 404, headers });
-        return new Response(JSON.stringify({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }), { headers });
+        if (!result.found) return jsonResponse({ error: 'article not found' }, { status: 404 }, headers);
+        return jsonResponse({ queued: result.queued, articleId: Number(id), reason: 'manual', hint: hint || undefined }, {}, headers);
       } catch (e) { console.error(e); }
-      return new Response(JSON.stringify({ queued: 0, error: 'failed' }), { headers });
+      return jsonResponse({ queued: 0, error: 'failed' }, {}, headers);
     }
 
     // POST /api/retranslate-bad — bulk retranslate poor quality translations
@@ -1045,7 +1144,7 @@ export default {
         retryIds.push(row.id);
       }
       const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
-      return new Response(JSON.stringify({ found: bad.results.length, retried }), { headers });
+      return jsonResponse({ found: bad.results.length, retried }, {}, headers);
     }
 
     if (path === '/api/stats') {
@@ -1057,19 +1156,24 @@ export default {
         env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
         env.DB.prepare("SELECT count(*) as count FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first(),
       ]);
-      return new Response(JSON.stringify({
+      return jsonResponse({
         by_lang: byLang.results,
         by_model: byModel.results,
         backlog: backlog?.count || 0,
         queue: { active: queue.results, stale: staleJobs?.count || 0 },
         review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },
-      }), { headers });
+      }, {}, headers);
     }
 
     // MCP Server — JSON-RPC 2.0 over HTTP
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
-      const mcpHeaders = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+      const mcpHeaders = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Auth-Mode': authMode,
+        'X-Auth-Status': authContext.ok ? 'authenticated' : 'anonymous',
+      };
       const respond = (id, result) => new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), { headers: mcpHeaders });
       const error = (id, code, msg) => new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message: msg } }), { headers: mcpHeaders });
 
@@ -1114,13 +1218,14 @@ export default {
             params = [`-${days} days`];
             if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
+            sql += ' ORDER BY a.pub_date DESC LIMIT ?';
           } else {
             sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
             params = [`-${days} days`];
             if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
+            sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
           }
-          sql += ' ORDER BY pub_date DESC LIMIT ?';
           params.push(limit);
           const rows = await env.DB.prepare(sql).bind(...params).all();
           return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
@@ -1147,6 +1252,6 @@ export default {
       return error(rpc.id, -32601, `Unknown method: ${rpc.method}`);
     }
 
-    return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
+    return jsonResponse({ error: 'Not found' }, { status: 404 }, headers);
   },
 };

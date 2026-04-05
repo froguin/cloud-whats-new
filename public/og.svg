@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#0B1220"/>
+  <rect x="40" y="40" width="1120" height="550" rx="28" fill="url(#panel)"/>
+  <circle cx="1080" cy="120" r="180" fill="#1D4ED8" fill-opacity="0.18"/>
+  <circle cx="1040" cy="520" r="220" fill="#10B981" fill-opacity="0.12"/>
+  <circle cx="180" cy="120" r="160" fill="#F59E0B" fill-opacity="0.16"/>
+  <text x="88" y="180" fill="#E5EEF9" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700">What's New</text>
+  <text x="88" y="244" fill="#93C5FD" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="30" font-weight="600">클라우드 최신 업데이트 한국어 요약</text>
+  <text x="88" y="348" fill="#F8FAFC" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="84" font-weight="700">AWS · GCP · Azure</text>
+  <text x="88" y="418" fill="#CBD5E1" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="30" font-weight="500">공식 릴리스 노트를 읽기 쉬운 한국어 카드로 정리합니다</text>
+  <rect x="88" y="472" width="180" height="52" rx="26" fill="#F59E0B"/>
+  <text x="128" y="506" fill="#111827" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700">whats-new.kr</text>
+  <defs>
+    <linearGradient id="panel" x1="74" y1="72" x2="1102" y2="554" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+</svg>

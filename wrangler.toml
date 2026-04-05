@@ -28,15 +28,19 @@ binding = "AI"
 
 # Alert webhook (Discord/Slack) — set via wrangler secret
 # wrangler secret put ALERT_WEBHOOK_URL
+# Key ring for protected APIs and MCP
+# wrangler secret put API_KEY_RING
 [vars]
 ALERT_WEBHOOK_URL = ""
 SITE_URL = "https://whats-new.kr"
 BACKLOG_QUEUE_BATCH_SIZE = "25"
+AUTH_ENFORCEMENT = "warn"
 
 
 [env.production.vars]
 SITE_URL = "https://whats-new.kr"
 BACKLOG_QUEUE_BATCH_SIZE = "25"
+AUTH_ENFORCEMENT = "warn"
 
 routes = [
   { pattern = "api.whats-new.kr", custom_domain = true }
