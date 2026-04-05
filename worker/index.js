@@ -57,6 +57,7 @@ const FEW_SHOT = [
 
 const DEFAULT_QUEUE_LANG = 'ko';
 const RETRY_BASE_DELAY_SECONDS = 30;
+let translationJobStateReady = false;
 function buildBadQualityFilter() {
   return `
     lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
@@ -115,7 +116,7 @@ const REGION_DISPLAY_MAP = {
     'New Zealand North': '뉴질랜드 북부',
     'Korea Central': '한국 중부',
     'Korea South': '한국 남부',
-let translationJobStateReady = false;    'Japan East': '일본 동부',
+    'Japan East': '일본 동부',
     'Japan West': '일본 서부',
     'Australia East': '오스트레일리아 동부',
     'Australia Southeast': '오스트레일리아 남동부',
