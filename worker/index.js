@@ -863,9 +863,14 @@ export default {
     // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
     if (minute % 15 === 0) {
       const n = await fetchRSS(env);
-      await env.DB.prepare("DELETE FROM localized_content WHERE article_id IN (SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days'))").run();
-      await env.DB.prepare("DELETE FROM articles WHERE pub_date < datetime('now', '-30 days')").run();
-      await env.DB.prepare("DELETE FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes') OR article_id NOT IN (SELECT id FROM articles)").run();
+      const expired = await env.DB.prepare("SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days')").all();
+      if (expired.results.length > 0) {
+        const ids = expired.results.map(r => r.id).join(',');
+        await env.DB.prepare(`DELETE FROM translation_job_state WHERE article_id IN (${ids})`).run();
+        await env.DB.prepare(`DELETE FROM localized_content WHERE article_id IN (${ids})`).run();
+        await env.DB.prepare(`DELETE FROM articles WHERE id IN (${ids})`).run();
+      }
+      await env.DB.prepare("DELETE FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").run();
       const backlog = await getMissingTranslationCount(env, 'ko');
       if (backlog > 0) await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
