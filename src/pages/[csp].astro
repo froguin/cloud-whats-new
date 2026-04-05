@@ -170,22 +170,39 @@ const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) 
 </Layout>
 
 <script>
-  // Pulse-highlight card when navigated via hash anchor
+  // Pulse on arrival + persistent card-active (hover-like) state
+  let activeCard: HTMLElement | null = null;
+
   function expandTarget() {
     const hash = window.location.hash;
     if (!hash) return;
+
+    // Deactivate previous
+    if (activeCard) activeCard.classList.remove('card-active');
+
     const card = document.querySelector<HTMLElement>(hash);
     if (!card) return;
-    // Expand clipped text
-    card.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
-      el.style.webkitLineClamp = 'unset';
-    });
-    // Pulse animation: restart if already running
+    activeCard = card;
+
+    // Persist hover-like state
+    card.classList.add('card-active');
+
+    // Amber pulse for initial attention
     card.classList.remove('card-pulse');
     void card.offsetWidth;
     card.classList.add('card-pulse');
+
     setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
   }
+
+  // Click outside to dismiss active state
+  document.addEventListener('click', (e) => {
+    if (activeCard && !activeCard.contains(e.target as Node)) {
+      activeCard.classList.remove('card-active');
+      activeCard = null;
+    }
+  });
+
   expandTarget();
   window.addEventListener('hashchange', expandTarget);
 </script>
