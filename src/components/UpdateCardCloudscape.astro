@@ -82,18 +82,16 @@ const awsLeftBorder = statuses.length > 0
     </div>
   </a>
 ) : (
-  <!-- Azure Fluent 2: CardHeader tint + subtle depth -->
+  <!-- Azure Fluent 2: spacious, shadow depth, left accent -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class="azure-card block no-underline overflow-hidden transition-all duration-200"
-    style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
-    <div class="px-4 pt-3 pb-2 sm:px-5" style="background:rgba(0,120,212,0.04); border-bottom:1px solid var(--color-border);">
-      <div class="flex items-center gap-1.5 flex-wrap">
+    style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3px solid #0078D4; border-radius:4px; box-shadow:var(--card-shadow);">
+    <div class="p-4 sm:p-5">
+      <div class="flex items-center gap-1.5 mb-3 flex-wrap">
         {isFallback && (<span class="px-1.5 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
         {statuses.map(s => <span class="px-2 py-0.5 rounded text-xs font-semibold" style={statusColors[s] || ''}>{s}</span>)}
         {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>
-    </div>
-    <div class="p-4 sm:p-5 pt-3">
       <h3 class="text-base sm:text-lg font-semibold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
       <p class="text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
@@ -110,7 +108,7 @@ const awsLeftBorder = statuses.length > 0
 <style>
   .aws-card:hover, .aws-card.card-active { border-color: #879596 !important; border-left-color: #FF9900 !important; background: var(--color-bg) !important; }
   .gcp-card:hover, .gcp-card.card-active { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); }
-  .azure-card:hover, .azure-card.card-active { border-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
+  .azure-card:hover, .azure-card.card-active { border-color: #0078D4 !important; border-left-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
   .aws-card:hover .line-clamp-3,
   .gcp-card:hover .line-clamp-3,
   .azure-card:hover .line-clamp-3,
