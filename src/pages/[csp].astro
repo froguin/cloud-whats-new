@@ -88,7 +88,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }
                 data-bg={st.bg}
                 data-color={st.color}
                 data-border={st.border}
-                style={`border-color: ${st.border}; color: ${st.color}; background: transparent; cursor: pointer;`}>
+                style={`border-color: ${st.border}; color: ${st.color}; background: ${st.bg}; cursor: pointer;`}>
                 {s}<span class="ml-1 opacity-60">{statusCounts[s]}</span>
               </button>
             );
@@ -146,10 +146,11 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }
         activeFilter = activeFilter === f ? '' : f;
         document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
           const on = b.dataset.filter === activeFilter && activeFilter !== '';
-          b.style.background = on ? (b.dataset.bg || 'transparent') : 'transparent';
-          b.style.borderColor = b.dataset.border || 'var(--color-border)';
-          b.style.color = b.dataset.color || 'var(--color-text-secondary)';
+          b.style.background = b.dataset.bg || '';
+          b.style.borderColor = b.dataset.border || '';
+          b.style.color = b.dataset.color || '';
           b.style.fontWeight = on ? '700' : '500';
+          b.style.boxShadow = on ? `0 0 0 2px ${b.dataset.border}` : '';
         });
         applyFilters();
       });
