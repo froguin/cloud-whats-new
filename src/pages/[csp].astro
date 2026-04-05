@@ -50,13 +50,6 @@ function getArticleStatuses(a: any): string {
 
 const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts['번역 준비중'] ? ['번역 준비중'] : [])];
 
-const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-  '정식 출시':  { bg: '#dcfce7', color: '#166534', border: '#16a34a' },
-  '미리보기':   { bg: '#dbeafe', color: '#1e40af', border: '#3b82f6' },
-  '베타':       { bg: '#f3e8ff', color: '#6b21a8', border: '#a855f7' },
-  '지원 종료':  { bg: '#fee2e2', color: '#991b1b', border: '#ef4444' },
-  '번역 준비중':{ bg: '#fef3c7', color: '#92400e', border: '#f59e0b' },
-};
 ---
 
 <Layout
@@ -79,20 +72,13 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }
     <div class="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0">
       {activeStatusFilters.length > 0 && (
         <div class="flex flex-wrap gap-1.5" id="filter-bar">
-          {activeStatusFilters.map(s => {
-            const st = STATUS_STYLE[s] || { bg: '#f3f4f6', color: '#374151', border: '#9ca3af' };
-            return (
-              <button
-                class="filter-btn text-xs px-2.5 py-1 rounded-full font-medium border transition-colors"
-                data-filter={s}
-                data-bg={st.bg}
-                data-color={st.color}
-                data-border={st.border}
-                style={`border-color: ${st.border}; color: ${st.color}; background: ${st.bg}; cursor: pointer;`}>
-                {s}<span class="ml-1 opacity-60">{statusCounts[s]}</span>
-              </button>
-            );
-          })}
+          {activeStatusFilters.map(s => (
+            <button
+              class="filter-btn text-xs px-2.5 py-1 rounded-full font-medium border transition-all"
+              data-filter={s}>
+              {s}<span class="ml-1 opacity-60">{statusCounts[s]}</span>
+            </button>
+          ))}
         </div>
       )}
       <input type="text" id="search" placeholder="검색..."
@@ -145,17 +131,42 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }
         const f = btn.dataset.filter || '';
         activeFilter = activeFilter === f ? '' : f;
         document.querySelectorAll<HTMLElement>('.filter-btn').forEach(b => {
-          const on = b.dataset.filter === activeFilter && activeFilter !== '';
-          b.style.background = b.dataset.bg || '';
-          b.style.borderColor = b.dataset.border || '';
-          b.style.color = b.dataset.color || '';
-          b.style.fontWeight = on ? '700' : '500';
-          b.style.boxShadow = on ? `0 0 0 2px ${b.dataset.border}` : '';
+          b.classList.toggle('is-active', b.dataset.filter === activeFilter && activeFilter !== '');
         });
         applyFilters();
       });
     });
   </script>
+
+  <style>
+    /* ── 비활성: 글씨+테두리만, 배경 투명 ── */
+    .filter-btn[data-filter="정식 출시"]  { border-color:#16a34a; color:#166534; background:transparent; }
+    .filter-btn[data-filter="미리보기"]   { border-color:#3b82f6; color:#1e40af; background:transparent; }
+    .filter-btn[data-filter="베타"]       { border-color:#a855f7; color:#6b21a8; background:transparent; }
+    .filter-btn[data-filter="지원 종료"]  { border-color:#ef4444; color:#991b1b; background:transparent; }
+    .filter-btn[data-filter="번역 준비중"]{ border-color:#f59e0b; color:#92400e; background:transparent; }
+
+    /* ── 다크모드 비활성: 채도 높인 밝은 색 ── */
+    :global([data-theme="dark"]) .filter-btn[data-filter="정식 출시"]  { border-color:#4ade80; color:#4ade80; }
+    :global([data-theme="dark"]) .filter-btn[data-filter="미리보기"]   { border-color:#60a5fa; color:#60a5fa; }
+    :global([data-theme="dark"]) .filter-btn[data-filter="베타"]       { border-color:#c084fc; color:#c084fc; }
+    :global([data-theme="dark"]) .filter-btn[data-filter="지원 종료"]  { border-color:#f87171; color:#f87171; }
+    :global([data-theme="dark"]) .filter-btn[data-filter="번역 준비중"]{ border-color:#fbbf24; color:#fbbf24; }
+
+    /* ── 활성: 배경색 채움 ── */
+    .filter-btn.is-active[data-filter="정식 출시"]  { background:#dcfce7; color:#166534; border-color:#16a34a; font-weight:700; box-shadow:0 0 0 2px #16a34a; }
+    .filter-btn.is-active[data-filter="미리보기"]   { background:#dbeafe; color:#1e40af; border-color:#3b82f6; font-weight:700; box-shadow:0 0 0 2px #3b82f6; }
+    .filter-btn.is-active[data-filter="베타"]       { background:#f3e8ff; color:#6b21a8; border-color:#a855f7; font-weight:700; box-shadow:0 0 0 2px #a855f7; }
+    .filter-btn.is-active[data-filter="지원 종료"]  { background:#fee2e2; color:#991b1b; border-color:#ef4444; font-weight:700; box-shadow:0 0 0 2px #ef4444; }
+    .filter-btn.is-active[data-filter="번역 준비중"]{ background:#fef3c7; color:#92400e; border-color:#f59e0b; font-weight:700; box-shadow:0 0 0 2px #f59e0b; }
+
+    /* ── 다크모드 활성: 진한 배경 + 밝은 글씨 ── */
+    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="정식 출시"]  { background:#166534; color:#dcfce7; border-color:#4ade80; box-shadow:0 0 0 2px #4ade80; }
+    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="미리보기"]   { background:#1e3a8a; color:#dbeafe; border-color:#60a5fa; box-shadow:0 0 0 2px #60a5fa; }
+    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="베타"]       { background:#581c87; color:#f3e8ff; border-color:#c084fc; box-shadow:0 0 0 2px #c084fc; }
+    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="지원 종료"]  { background:#7f1d1d; color:#fee2e2; border-color:#f87171; box-shadow:0 0 0 2px #f87171; }
+    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="번역 준비중"]{ background:#78350f; color:#fef3c7; border-color:#fbbf24; box-shadow:0 0 0 2px #fbbf24; }
+  </style>
 </Layout>
 
 <script>
