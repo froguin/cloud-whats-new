@@ -56,11 +56,13 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, urllib.request, urllib.error, os, sys
+          from collections import defaultdict
 
           token   = os.environ['CF_TOKEN']
           account = os.environ['CF_ACCOUNT']
           project = os.environ['PROJECT']
-          keep    = 3
+          KEEP_PROD    = 3
+          KEEP_PREVIEW = 1  # per branch
 
           url = f"https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{project}/deployments?per_page=100"
           req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
@@ -68,10 +70,19 @@ jobs:
 
           prod    = [d for d in data if d.get('environment') == 'production']
           preview = [d for d in data if d.get('environment') != 'production']
-          to_delete = prod[keep:] + preview
 
-          print(f"Production: {len(prod)} total, keeping {min(keep, len(prod))}, deleting {len(prod[keep:])}")
-          print(f"Preview: {len(preview)} total, deleting all")
+          # Group preview by branch, keep latest KEEP_PREVIEW per branch
+          by_branch = defaultdict(list)
+          for d in preview:
+              branch = d.get('deployment_trigger', {}).get('metadata', {}).get('branch', 'unknown')
+              by_branch[branch].append(d)
+
+          to_delete = prod[KEEP_PROD:]
+          for branch, deployments in by_branch.items():
+              to_delete += deployments[KEEP_PREVIEW:]
+              print(f"Preview [{branch}]: {len(deployments)} total, keeping {min(KEEP_PREVIEW, len(deployments))}, deleting {len(deployments[KEEP_PREVIEW:])}")
+
+          print(f"Production: {len(prod)} total, keeping {min(KEEP_PROD, len(prod))}, deleting {len(prod[KEEP_PROD:])}")
 
           for d in to_delete:
               del_url = f"https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{project}/deployments/{d['id']}?force=true"
