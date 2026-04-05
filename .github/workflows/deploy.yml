@@ -65,7 +65,7 @@ jobs:
           KEEP_PROD    = 3
           KEEP_PREVIEW = 1  # per branch
 
-          url = f"https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{project}/deployments?per_page=100"
+          url = f"https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{project}/deployments?per_page=25"
           req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
           data = json.loads(urllib.request.urlopen(req).read())['result']
 
