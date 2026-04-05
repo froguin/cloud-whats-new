@@ -25,23 +25,13 @@ const gcpAccent = gcpColors[index % 4];
 
 const hasDetails = !!(target || features || regions);
 
-// AWS: Cloudscape severity left-border color by status
-const awsSeverityBorder: Record<string, string> = {
-  '정식 출시': '#037F0C',
-  '미리보기':  '#0972D3',
-  '베타':      '#8056D6',
-  '지원 종료': '#D91515',
-};
-const awsLeftBorder = statuses.length > 0
-  ? (awsSeverityBorder[statuses[0]] ?? '#0972D3')
-  : '#0972D3';
 ---
 
 {csp === 'aws' ? (
   <!-- AWS Cloudscape: bordered, dense, severity left-border -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class="aws-card block no-underline overflow-hidden transition-all duration-200"
-    style={`background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px; border-left:4px solid ${awsLeftBorder};`}>
+    style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px;">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
         {isFallback && (<span class="px-1.5 py-0.5 text-xs font-medium" style="border-radius:2px;background:#fef3c7;color:#92400e;">번역 준비중</span>)}
@@ -106,7 +96,7 @@ const awsLeftBorder = statuses.length > 0
 )}
 
 <style>
-  .aws-card:hover, .aws-card.card-active { border-color: #879596 !important; border-left-color: #FF9900 !important; background: var(--color-bg) !important; }
+  .aws-card:hover, .aws-card.card-active { border-color: #879596 !important; background: var(--color-bg) !important; }
   .gcp-card:hover, .gcp-card.card-active { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); }
   .azure-card:hover, .azure-card.card-active { border-color: #0078D4 !important; border-left-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
   .aws-card:hover .line-clamp-3,
