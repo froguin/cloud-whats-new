@@ -15,7 +15,7 @@ queue = "cloud-whats-new-translation-jobs"
 
 [[queues.consumers]]
 queue = "cloud-whats-new-translation-jobs"
-max_batch_size = 10
+max_batch_size = 3
 max_batch_timeout = 1
 max_retries = 3
 dead_letter_queue = "cloud-whats-new-translation-jobs-dlq"

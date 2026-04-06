@@ -31,18 +31,20 @@ PROCESS — follow this order:
 RULES:
 ${TRANSLATION_RULES}`;
 
-const REVIEW_PROMPT = `You review Korean cloud news cards. Compare the translated fields against the original English and fix errors per these rules:
+const REVIEW_PROMPT = `You review Korean cloud news cards. Your job is to find exactly 3 errors or issues in the translation. Compare the translated fields against the original English and check these rules:
 
 ${TRANSLATION_RULES}
 
-Also fix:
-- Remove Chinese characters (漢字), Japanese kana, or any non-Korean/English/number characters
-- Remove hallucinated content not in the original English
-- Fix garbled or truncated text
+Find and fix these specific problems:
+1. Chinese characters (漢字), Japanese kana, or any non-Korean/English/number characters
+2. Hallucinated content not in the original English
+3. Garbled, truncated, or unnaturally machine-translated text
+4. Status field contradicting the description context
+5. Title that is too vague, incomplete, or mirrors the English too closely
 
 OUTPUT JSON with corrected fields only. Omit fields that are correct.
 {"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
-If all correct, output: {"pass":true}`;
+If you cannot find any real errors after thorough review, output: {"pass":true}`;
 
 const FEW_SHOT = [
   // AWS: standard single-product update
@@ -371,7 +373,11 @@ function parseRSS(xml, csp) {
     const block = match[0];
     const get = (t) => {
       const m = block.match(new RegExp(`<${t}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${t}>`));
-      return m ? m[1].trim() : '';
+      if (!m) return '';
+      let val = m[1].trim();
+      // Handle nested or multiple CDATA sections
+      val = val.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '');
+      return val;
     };
     const url = isAtom
       ? ((block.match(/<link[^>]*href="([^"]*)"/) || [])[1] || '')
@@ -996,6 +1002,7 @@ export default {
     // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
     if (minute % 15 === 0) {
       const n = await fetchRSS(env);
+      const webhookUrl = env.ALERT_WEBHOOK_URL;
       const expired = await env.DB.prepare("SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days')").all();
       if (expired.results.length > 0) {
         const ids = expired.results.map(r => r.id).join(',');
@@ -1004,11 +1011,18 @@ export default {
         await env.DB.prepare(`DELETE FROM articles WHERE id IN (${ids})`).run();
       }
       await env.DB.prepare("DELETE FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").run();
+      // Alert on stale/failed jobs in DLQ
+      const staleCount = await env.DB.prepare("SELECT count(*) as c FROM translation_job_state WHERE updated_at < datetime('now', '-30 minutes')").first();
+      if (staleCount?.c > 0 && webhookUrl) {
+        await fetch(webhookUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: `⚠️ What's New: ${staleCount.c}건의 번역 작업이 30분 이상 정체 중. DLQ 확인 필요.` }),
+        }).catch(() => {});
+      }
       const backlog = await getMissingTranslationCount(env, 'ko');
       if (backlog > 0) await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
       // Alert on consecutive empty fetches
-      const webhookUrl = env.ALERT_WEBHOOK_URL;
       if (webhookUrl && n.newArticles === 0) {
         const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
         if (prev && prev.c === 0) {
