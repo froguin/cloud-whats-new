@@ -12,6 +12,7 @@ const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes i
 - Title: product name + core change. Remove status tags like [Preview], [Launched], [Retired], (GA)
 - Summary: 2 sentences. First: what changed. Second: why it matters. Start with 이번/새로운/사용자는. Do not restate the title
 - Status from description: "preview" → 미리보기, "beta" → 베타, "retired"/"deprecated" → 지원 종료, "GA"/"launched" → 정식 출시
+- IMPORTANT: "beta"/"preview" in a version string (e.g. v1.2.0-beta01) is NOT a service status. Determine status from the description context, not from version numbers
 - Features: 3 capability descriptions
 - Regions: vendor standard Korean region names or "모든 리전"
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
@@ -72,6 +73,10 @@ function buildBadQualityFilter() {
       OR lc.summary LIKE '%\`%'
       OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
       OR lc.title LIKE '%and 및%'
+      OR lc.summary GLOB '*[一-龥]*'
+      OR lc.summary GLOB '*[ぁ-ヿ]*'
+      OR lc.title GLOB '*[一-龥]*'
+      OR lc.title GLOB '*[ぁ-ヿ]*'
     )`;
 }
 
@@ -1159,7 +1164,10 @@ export default {
     if (path === '/api/pipeline' && request.method === 'POST') {
       const action = url.searchParams.get('action') || 'fetch';
       const id = url.searchParams.get('id');
-      const hint = url.searchParams.get('hint') || '';
+      let hint = url.searchParams.get('hint') || '';
+      if (!hint && request.headers.get('content-type')?.includes('application/json')) {
+        try { const body = await request.json(); hint = body.hint || ''; } catch {}
+      }
 
       if (action === 'fetch') {
         const n = await fetchRSS(env);
