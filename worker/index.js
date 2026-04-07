@@ -1305,21 +1305,23 @@ export default {
           // Support both days and start_date/end_date
           let dateFilter, dateParams;
           if (args?.start_date) {
-            dateFilter = 'pub_date >= ?';
-            dateParams = [args.start_date];
+            const startISO = args.start_date + 'T00:00:00.000Z';
+            dateFilter = `lc.pub_date >= ?`;
+            dateParams = [startISO];
             if (args?.end_date) {
-              dateFilter += ' AND pub_date <= ?';
-              dateParams.push(args.end_date + 'T23:59:59Z');
+              const endISO = args.end_date + 'T23:59:59.999Z';
+              dateFilter += ` AND lc.pub_date <= ?`;
+              dateParams.push(endISO);
             }
           } else {
             const days = args?.days || 7;
-            dateFilter = `pub_date > datetime('now', ?)`;
+            dateFilter = `lc.pub_date > datetime('now', ?)`;
             dateParams = [`-${days} days`];
           }
 
           let sql, params;
           if (lang === 'en') {
-            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE ${dateFilter}`;
+            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE ${dateFilter.replace(/lc\./g, 'a.')}`;
             params = [...dateParams];
             if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
@@ -1332,8 +1334,12 @@ export default {
             sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
           }
           params.push(limit);
-          const rows = await env.DB.prepare(sql).bind(...params).all();
-          return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
+          try {
+            const rows = await env.DB.prepare(sql).bind(...params).all();
+            return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
+          } catch (dbErr) {
+            return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify({ error: dbErr.message, sql, params }) }] });
+          }
         }
 
         if (name === 'get_release') {
