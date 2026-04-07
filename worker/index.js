@@ -1346,8 +1346,20 @@ export default {
           }
           params.push(limit);
           try {
+            // Count total matches
+            const countSql = sql.replace(/SELECT .+? FROM/, 'SELECT count(*) as total FROM').replace(/ ORDER BY .+/, '');
+            const countParams = params.slice(0, -1); // exclude limit
+            const countRow = await env.DB.prepare(countSql).bind(...countParams).first();
+            const total = countRow?.total || 0;
+
             const rows = await env.DB.prepare(sql).bind(...params).all();
-            return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify(rows.results, null, 2) }] });
+            const result = rows.results;
+
+            let text = JSON.stringify(result, null, 2);
+            if (total > limit) {
+              text += `\n\n--- ${total}건 중 ${limit}건 반환. 더 보려면 csp, 날짜 범위를 좁히거나 limit을 늘려서 재검색하세요. ---`;
+            }
+            return respond(rpc.id, { content: [{ type: 'text', text }] });
           } catch (dbErr) {
             return respond(rpc.id, { content: [{ type: 'text', text: JSON.stringify({ error: dbErr.message, sql, params }) }] });
           }
