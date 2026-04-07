@@ -1277,9 +1277,9 @@ export default {
         return respond(rpc.id, { tools: [
           { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
             type: 'object', properties: {
-              query: { type: 'string', description: 'Search keyword (product name, feature, etc.)' },
+              query: { type: 'string', description: 'Search keyword — matches Korean title and summary' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
-              lang: { type: 'string', enum: ['ko', 'en'], description: 'Language: ko (Korean summary) or en (English original). Default: ko' },
+              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language: ko (Korean, default) or en (English original). Search always uses Korean.' },
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
@@ -1332,12 +1332,14 @@ export default {
 
           let sql, params;
           if (lang === 'en') {
-            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE ${dateFilter.replace(/lc\./g, 'a.')}`;
+            // Search on Korean fields, output English original
+            sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
-            if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
-            if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
-            sql += ' ORDER BY a.pub_date DESC LIMIT ?';
+            if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
+            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
+            sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
           } else {
+            // Search and output Korean
             sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
             if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
