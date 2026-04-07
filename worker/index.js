@@ -1280,10 +1280,10 @@ export default {
               query: { type: 'string', description: 'Search keyword (product name, feature, etc.)' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
               lang: { type: 'string', enum: ['ko', 'en'], description: 'Language: ko (Korean summary) or en (English original). Default: ko' },
-              days: { type: 'number', description: 'Look back N days from now (default 7). Ignored if start_date is set.' },
+              days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
-              limit: { type: 'number', description: 'Max results (default 10)' },
+              limit: { type: 'number', description: 'Max results (default: 50, or 10/day for date ranges, max 100)' },
             },
           }},
           { name: 'get_release', description: 'Get a specific release note by article ID. Returns both Korean and English.', inputSchema: {
@@ -1299,10 +1299,9 @@ export default {
         if (name === 'search_releases') {
           const csp = args?.csp ? args.csp.toLowerCase() : null;
           const lang = args?.lang || 'ko';
-          const limit = Math.min(args?.limit || 10, 50);
           const query = args?.query || '';
 
-          // Support both days and start_date/end_date
+          // Date range: start_date/end_date > days > default 30 days
           let dateFilter, dateParams;
           if (args?.start_date) {
             const startISO = args.start_date + 'T00:00:00.000Z';
@@ -1314,9 +1313,21 @@ export default {
               dateParams.push(endISO);
             }
           } else {
-            const days = args?.days || 7;
+            const days = args?.days || 30;
             dateFilter = `lc.pub_date > datetime('now', ?)`;
             dateParams = [`-${days} days`];
+          }
+
+          // Limit: per-day cap when date range given, otherwise default 50
+          let limit;
+          if (args?.limit) {
+            limit = Math.min(args.limit, 100);
+          } else if (args?.start_date && args?.end_date) {
+            const d0 = new Date(args.start_date), d1 = new Date(args.end_date);
+            const days = Math.max(1, Math.ceil((d1 - d0) / 86400000));
+            limit = Math.min(days * 10, 100);
+          } else {
+            limit = 50;
           }
 
           let sql, params;
