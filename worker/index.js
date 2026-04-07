@@ -1278,9 +1278,11 @@ export default {
           { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
             type: 'object', properties: {
               query: { type: 'string', description: 'Search keyword (product name, feature, etc.)' },
-              csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter' },
+              csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
               lang: { type: 'string', enum: ['ko', 'en'], description: 'Language: ko (Korean summary) or en (English original). Default: ko' },
-              days: { type: 'number', description: 'Look back N days (default 7)' },
+              days: { type: 'number', description: 'Look back N days from now (default 7). Ignored if start_date is set.' },
+              start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
+              end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
               limit: { type: 'number', description: 'Max results (default 10)' },
             },
           }},
@@ -1295,21 +1297,36 @@ export default {
         const { name, arguments: args } = rpc.params || {};
 
         if (name === 'search_releases') {
-          const csp = args?.csp || null;
+          const csp = args?.csp ? args.csp.toLowerCase() : null;
           const lang = args?.lang || 'ko';
-          const days = args?.days || 7;
           const limit = Math.min(args?.limit || 10, 50);
           const query = args?.query || '';
+
+          // Support both days and start_date/end_date
+          let dateFilter, dateParams;
+          if (args?.start_date) {
+            dateFilter = 'pub_date >= ?';
+            dateParams = [args.start_date];
+            if (args?.end_date) {
+              dateFilter += ' AND pub_date <= ?';
+              dateParams.push(args.end_date + 'T23:59:59Z');
+            }
+          } else {
+            const days = args?.days || 7;
+            dateFilter = `pub_date > datetime('now', ?)`;
+            dateParams = [`-${days} days`];
+          }
+
           let sql, params;
           if (lang === 'en') {
-            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE a.pub_date > datetime('now', ?)`;
-            params = [`-${days} days`];
+            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as summary, a.url, a.pub_date FROM articles a WHERE ${dateFilter}`;
+            params = [...dateParams];
             if (csp) { sql += ' AND a.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (a.title_en LIKE ? OR a.description_en LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
             sql += ' ORDER BY a.pub_date DESC LIMIT ?';
           } else {
-            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND lc.pub_date > datetime('now', ?)`;
-            params = [`-${days} days`];
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+            params = [...dateParams];
             if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
             if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
             sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
