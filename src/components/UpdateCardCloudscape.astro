@@ -30,7 +30,7 @@ const hasDetails = !!(target || features || regions);
 {csp === 'aws' ? (
   <!-- AWS Cloudscape: bordered, dense, severity left-border -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    id={`article-${Astro.props.articleId}`} class="aws-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class={`aws-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
     style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px;">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -39,12 +39,12 @@ const hasDetails = !!(target || features || regions);
         {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>
       <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class="text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
         <div class="mt-3 pt-2 space-y-1 text-xs" style="border-top:1px solid var(--color-border);">
-          {target && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{target}</span></div>}
-          {features && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{features}</span></div>}
-          {regions && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{regions}</span></div>}
+          {target && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-semibold" style="color:#0972D3;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{regions}</span></div>}
         </div>
       )}
     </div>
@@ -52,7 +52,7 @@ const hasDetails = !!(target || features || regions);
 ) : csp === 'gcp' ? (
   <!-- GCP Material 3: rounded, floating, surface-tint + 4-color top border -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    id={`article-${Astro.props.articleId}`} class="gcp-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class={`gcp-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
     style={`background:var(--color-surface); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent}; --gcp-accent:${gcpAccent};`}>
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -61,12 +61,12 @@ const hasDetails = !!(target || features || regions);
         {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>
       <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class="text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
         <div class="mt-3 pt-2 space-y-1 text-xs" style={`border-top:1px solid ${gcpAccent}1F;`}>
-          {target && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{target}</span></div>}
-          {features && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{features}</span></div>}
-          {regions && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);" class="line-clamp-1">{regions}</span></div>}
+          {target && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{regions}</span></div>}
         </div>
       )}
     </div>
@@ -74,7 +74,7 @@ const hasDetails = !!(target || features || regions);
 ) : (
   <!-- Azure Fluent 2: spacious, shadow depth, left accent -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
-    id={`article-${Astro.props.articleId}`} class="azure-card block no-underline overflow-hidden transition-all duration-200"
+    id={`article-${Astro.props.articleId}`} class={`azure-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
     style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
     <div class="p-4 sm:p-5">
       <div class="flex items-center gap-1.5 mb-3 flex-wrap">
@@ -83,12 +83,12 @@ const hasDetails = !!(target || features || regions);
         {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
       </div>
       <h3 class="text-base sm:text-lg font-semibold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class="text-sm leading-relaxed line-clamp-3" style="color:var(--color-text-secondary);">{content}</p>
+      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
         <div class="mt-3 pt-2 space-y-1 text-xs" style="border-top:1px solid var(--color-border);">
-          {target && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span> <span class="ml-2" style="color:var(--color-text-secondary);" class="line-clamp-1">{target}</span></div>}
-          {features && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span> <span class="ml-2" style="color:var(--color-text-secondary);" class="line-clamp-1">{features}</span></div>}
-          {regions && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span> <span class="ml-2" style="color:var(--color-text-secondary);" class="line-clamp-1">{regions}</span></div>}
+          {target && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span> <span class="ml-2" style="color:var(--color-text-secondary);">{target}</span></div>}
+          {features && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span> <span class="ml-2" style="color:var(--color-text-secondary);">{features}</span></div>}
+          {regions && <div><span class="font-semibold" style="color:#0078D4;"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span> <span class="ml-2" style="color:var(--color-text-secondary);">{regions}</span></div>}
         </div>
       )}
     </div>
@@ -100,12 +100,9 @@ const hasDetails = !!(target || features || regions);
   .gcp-card:hover,   .gcp-card.card-active   { box-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30) !important; transform: translateY(-2px); background: color-mix(in srgb, var(--gcp-accent) 4%, var(--color-surface)) !important; }
   .azure-card:hover, .azure-card.card-active { border-color: #0078D4 !important; border-left-color: #0078D4 !important; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14) !important; }
 
-  .aws-card:hover .line-clamp-3,         .aws-card:hover .line-clamp-1,
-  .gcp-card:hover .line-clamp-3,         .gcp-card:hover .line-clamp-1,
-  .azure-card:hover .line-clamp-3,       .azure-card:hover .line-clamp-1,
-  .aws-card.card-active .line-clamp-3,   .aws-card.card-active .line-clamp-1,
-  .gcp-card.card-active .line-clamp-3,   .gcp-card.card-active .line-clamp-1,
-  .azure-card.card-active .line-clamp-3, .azure-card.card-active .line-clamp-1 {
+  /* Fallback(번역 준비중) 카드만 hover/active 시 clamp 해제 */
+  .card-fallback:hover .line-clamp-3,
+  .card-fallback.card-active .line-clamp-3 {
     -webkit-line-clamp: unset !important;
   }
 
@@ -195,9 +192,9 @@ const hasDetails = !!(target || features || regions);
       card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
       card.addEventListener('click', (e) => {
         if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
-        if (!expanded) {
+        if (!expanded && card.classList.contains('card-fallback')) {
           e.preventDefault();
-          card.querySelectorAll<HTMLElement>('.line-clamp-3,.line-clamp-1').forEach((el) => {
+          card.querySelectorAll<HTMLElement>('.line-clamp-3').forEach((el) => {
             el.style.webkitLineClamp = 'unset';
           });
           expanded = true;
