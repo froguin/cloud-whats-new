@@ -1360,7 +1360,7 @@ export default {
           const tbl = (isAuthenticated && lang !== 'en') ? 'ko' : 'lc';
           if (csp) { sql += ` AND ${tbl}.csp = ?`; params.push(csp); }
           if (query) { sql += ` AND (${tbl}.title LIKE ? OR ${tbl}.summary LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
-          sql += ' ORDER BY pub_date DESC LIMIT ?';
+          sql += ` ORDER BY ${tbl}.pub_date DESC LIMIT ?`;
           params.push(limit);
           try {
             // Count total matches
