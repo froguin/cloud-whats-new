@@ -1131,21 +1131,9 @@ export default {
       isTrustedIpBypassEnabled(env) &&
       isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
-      // MCP auth: per-tool — search_releases/get_stats are public, get_release requires auth
-      const body = await request.clone().text();
-      let rpcMethod = '', toolName = '';
-      try {
-        const rpc = JSON.parse(body);
-        rpcMethod = rpc.method || '';
-        toolName = rpc.params?.name || '';
-      } catch {}
-      const publicMcpOps = ['initialize', 'tools/list', 'notifications/initialized'];
-      const publicTools = ['search_releases', 'get_stats'];
-      if (publicMcpOps.includes(rpcMethod) || (rpcMethod === 'tools/call' && publicTools.includes(toolName))) {
-        authMode = 'off';
-      } else {
-        authMode = authMode === 'off' ? 'on' : authMode;
-      }
+      // MCP: always allow access, but check auth for enriched responses
+      // authContext is checked inside tool handlers for content gating
+      authMode = 'off';
     }
 
     let authContext = { ok: false, reason: 'not_checked' };
@@ -1277,11 +1265,13 @@ export default {
     // MCP Server — JSON-RPC 2.0 over HTTP
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
+      // Check auth for content gating (not for access control)
+      const mcpAuth = authenticateRequest(request, env);
+      const isAuthenticated = mcpAuth.ok;
       const mcpHeaders = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'X-Auth-Mode': authMode,
-        'X-Auth-Status': authContext.ok ? 'authenticated' : 'anonymous',
+        'X-Auth-Status': isAuthenticated ? 'authenticated' : 'anonymous',
       };
       const respond = (id, result) => new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), { headers: mcpHeaders });
       const error = (id, code, msg) => new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message: msg } }), { headers: mcpHeaders });
@@ -1351,22 +1341,27 @@ export default {
             limit = 50;
           }
 
-          let sql, params;
-          if (lang === 'en') {
-            // Search on Korean fields, output English original
-            sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
-            params = [...dateParams];
-            if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
-            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
-            sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
+          let sql, params = [];
+          if (isAuthenticated) {
+            if (lang === 'en') {
+              // English original from articles table + URL
+              sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+              params = [...dateParams];
+            } else {
+              // Localized (ko, ja, zh...) with ko fallback + URL
+              sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
+              params = [lang, ...dateParams];
+            }
           } else {
-            // Search and output Korean
-            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+            // Anonymous: Korean only, no URL
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
-            if (csp) { sql += ' AND lc.csp = ?'; params.push(csp); }
-            if (query) { sql += ' AND (lc.title LIKE ? OR lc.summary LIKE ?)'; params.push(`%${query}%`, `%${query}%`); }
-            sql += ' ORDER BY lc.pub_date DESC LIMIT ?';
           }
+          // Common filters
+          const tbl = (isAuthenticated && lang !== 'en') ? 'ko' : 'lc';
+          if (csp) { sql += ` AND ${tbl}.csp = ?`; params.push(csp); }
+          if (query) { sql += ` AND (${tbl}.title LIKE ? OR ${tbl}.summary LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
+          sql += ' ORDER BY pub_date DESC LIMIT ?';
           params.push(limit);
           try {
             // Count total matches
