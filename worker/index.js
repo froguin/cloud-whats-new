@@ -1266,8 +1266,7 @@ export default {
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
       // Check auth for content gating (not for access control)
-      const mcpAuth = authenticateRequest(request, env);
-      const isAuthenticated = mcpAuth.ok;
+      const isAuthenticated = true; // MCP is fully public
       const mcpHeaders = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -1342,22 +1341,15 @@ export default {
           }
 
           let sql, params = [];
-          if (isAuthenticated) {
-            if (lang === 'en') {
-              // Authenticated + en: English summary + original URL
-              sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
-              params = [...dateParams];
-            } else {
-              // Authenticated + lang: localized summary (ko fallback) + original title/URL
-              sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.title_en as original_title, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
-              params = [lang, ...dateParams];
-            }
-          } else {
-            // Anonymous: Korean summary only
-            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+          if (lang === 'en') {
+            sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
+          } else {
+            // ko, ja, zh... — requested lang with ko fallback + original title/URL
+            sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.title_en as original_title, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
+            params = [lang, ...dateParams];
           }
-          const tbl = (isAuthenticated && lang !== 'en') ? 'ko' : 'lc';
+          const tbl = lang !== 'en' ? 'ko' : 'lc';
           if (csp) { sql += ` AND ${tbl}.csp = ?`; params.push(csp); }
           if (query) { sql += ` AND (${tbl}.title LIKE ? OR ${tbl}.summary LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
           sql += ` ORDER BY ${tbl}.pub_date DESC LIMIT ?`;
