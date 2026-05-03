@@ -9,10 +9,10 @@ const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
 const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is
 - Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및")
-- Title: product name + core change. Remove status tags like [Preview], [Launched], [Retired], (GA)
+- Title: product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title
 - Summary: 2 sentences. First: what changed. Second: why it matters. Start with 이번/새로운/사용자는. Do not restate the title
-- Status from description: "preview" → 미리보기, "beta" → 베타, "retired"/"deprecated" → 지원 종료, "GA"/"launched" → 정식 출시
-- IMPORTANT: "beta"/"preview" in a version string (e.g. v1.2.0-beta01) is NOT a service status. Determine status from the description context, not from version numbers
+- Status from description: "preview" → 미리보기, "beta" → 베타, "retired"/"deprecated" → 지원 종료, "GA"/"launched" → 정식 출시. Default to 정식 출시 if no explicit preview/beta/retired keyword in description
+- IMPORTANT: "beta"/"preview" in a version string (e.g. v1.2.0-beta01) is NOT a service status. Determine status from the description context, not from version numbers. Only set 베타 or 미리보기 if the description explicitly says the SERVICE is in beta/preview
 - Features: 3 capability descriptions
 - Regions: vendor standard Korean region names or "모든 리전"
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
@@ -682,6 +682,7 @@ function assessTranslationQuality(record, row) {
   if (!title || !summary) reasons.push('missing-core-fields');
   if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(title + summary)) reasons.push('cjk-contamination');
   if (hasDanglingTitleFragment(title)) reasons.push('title-truncated');
+  if (title.length > 60) reasons.push('title-too-long');
   if (hasMarkdownArtifacts(title) || hasMarkdownArtifacts(summary)) reasons.push('markdown-artifact');
   if (title === row.title_en) reasons.push('title-not-translated');
   if (summary.length < 30) reasons.push('summary-too-short');
@@ -689,6 +690,12 @@ function assessTranslationQuality(record, row) {
   if (summary.slice(0, 24) === title.slice(0, 24)) reasons.push('summary-repeats-title');
   if (!target || target === 'all') reasons.push('target-too-generic');
   if (features.length < 2) reasons.push('features-too-thin');
+
+  // Status validation: 베타/미리보기 must have evidence in description
+  const statusStr = JSON.stringify(record.status || '').toLowerCase();
+  const descLower = String(row.description_en || '').toLowerCase();
+  if ((statusStr.includes('베타') || statusStr.includes('beta')) && !descLower.includes('beta') && !descLower.includes('베타')) reasons.push('status-beta-no-evidence');
+  if ((statusStr.includes('미리보기') || statusStr.includes('preview')) && !descLower.includes('preview') && !descLower.includes('미리보기') && !row.title_en.toLowerCase().includes('preview')) reasons.push('status-preview-no-evidence');
 
   return {
     pass: reasons.length === 0,
@@ -1124,7 +1131,21 @@ export default {
       isTrustedIpBypassEnabled(env) &&
       isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
-      authMode = authMode === 'off' ? 'on' : authMode;
+      // MCP auth: per-tool — search_releases/get_stats are public, get_release requires auth
+      const body = await request.clone().text();
+      let rpcMethod = '', toolName = '';
+      try {
+        const rpc = JSON.parse(body);
+        rpcMethod = rpc.method || '';
+        toolName = rpc.params?.name || '';
+      } catch {}
+      const publicMcpOps = ['initialize', 'tools/list', 'notifications/initialized'];
+      const publicTools = ['search_releases', 'get_stats'];
+      if (publicMcpOps.includes(rpcMethod) || (rpcMethod === 'tools/call' && publicTools.includes(toolName))) {
+        authMode = 'off';
+      } else {
+        authMode = authMode === 'off' ? 'on' : authMode;
+      }
     }
 
     let authContext = { ok: false, reason: 'not_checked' };
