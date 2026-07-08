@@ -7,16 +7,24 @@ const RSS_FEEDS = {
 const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
-const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is
-- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및")
-- Title: product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title
-- Summary: 2 sentences. First: what changed. Second: why it matters. Start with 이번/새로운/사용자는. Do not restate the title
-- Status from description: "preview" → 미리보기, "beta" → 베타, "retired"/"deprecated" → 지원 종료, "GA"/"launched" → 정식 출시. Default to 정식 출시 if no explicit preview/beta/retired keyword in description
-- IMPORTANT: "beta"/"preview" in a version string (e.g. v1.2.0-beta01) is NOT a service status. Determine status from the description context, not from version numbers. Only set 베타 or 미리보기 if the description explicitly says the SERVICE is in beta/preview
-- Features: 3 capability descriptions
-- Regions: vendor standard Korean region names or "모든 리전"
+const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is.
+- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
+- Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
+- Summary: Exactly 2 sentences in natural, technical Korean.
+  - First sentence: Describe the key technical change, including specific product names, features, or metrics. Avoid vague descriptions.
+  - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
+  - Do NOT use generic template expressions like "이를 통해 효율성이 향상됩니다" or simply repeating the title. Write in a concise, informative style suited for developers.
+- Status determination: Must be determined from the description context. Choose from: "정식 출시", "미리보기", "베타", "지원 종료".
+  - Default: "정식 출시" (Default status for general availability, GA, launched, now available, or standard updates).
+  - "미리보기" (Preview / Public Preview / In preview): If the description explicitly states the service/feature is in "preview". Note: AWS and Azure almost always use "Preview" for pre-release features.
+  - "베타" (Beta / Public Beta): Only if the service is explicitly described as "beta" (mainly Google Cloud or third-party products like Anthropic). Never label AWS or Azure services as "베타" unless the word "beta" is explicitly present in the original text.
+  - "지원 종료" (Retired / Deprecated / End of Support): If the service/feature is being retired, deprecated, or disabled.
+  - Avoid false positives: version numbers containing "-beta" or "preview" (e.g., Kubernetes v1.30-beta.0) are version strings, NOT the release status of the cloud service itself. Set the status of such version updates to "정식 출시" unless the service itself is in preview/beta.
+- Features: Exactly 3 key technical capabilities or changes introduced, separated by commas. Focus on concrete technical facts (e.g. new APIs, supported versions, pricing changes, or limit increases) rather than high-level marketing descriptions.
+- Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자" or "모든 사용자".
+- Regions: Vendor standard Korean region names or "모든 리전".
 - GCP date entries: YYYY년 M월 D일: main product 외 N건
-- MUST KEEP ENTITIES in user message — reproduce exactly`;
+- MUST KEEP ENTITIES in user message — reproduce exactly.`;
 
 const SYSTEM_PROMPT = `You are a Korean cloud news summarizer for IT professionals.
 
@@ -707,6 +715,38 @@ function applyDeterministicFixes(record, row) {
     return f.length > 5 && !/^[A-Z][A-Za-z0-9\s\.\-]+$/.test(f);
   });
   if (featList.length >= 2) features = featList.slice(0, 3).join(', ');
+
+  // Fix 5: Status validation and corrections
+  let parsedStatus = [];
+  try {
+    parsedStatus = JSON.parse(status);
+  } catch {
+    parsedStatus = Array.isArray(status) ? status : [status || ''];
+  }
+  const descLower = String(row.description_en || '').toLowerCase();
+  const titleLower = String(row.title_en || '').toLowerCase();
+
+  // Strip "베타" if there is no beta keyword in the original title or description
+  if (parsedStatus.includes('베타')) {
+    const hasBetaEvidence = descLower.includes('beta') || descLower.includes('베타') || titleLower.includes('beta') || titleLower.includes('베타');
+    if (!hasBetaEvidence) {
+      parsedStatus = parsedStatus.filter(s => s !== '베타');
+    }
+  }
+
+  // Strip "미리보기" if there is no preview keyword in the original title or description
+  if (parsedStatus.includes('미리보기')) {
+    const hasPreviewEvidence = descLower.includes('preview') || descLower.includes('미리보기') || titleLower.includes('preview') || titleLower.includes('미리보기');
+    if (!hasPreviewEvidence) {
+      parsedStatus = parsedStatus.filter(s => s !== '미리보기');
+    }
+  }
+
+  // If status list is empty, default to "정식 출시"
+  if (parsedStatus.length === 0) {
+    parsedStatus = ['정식 출시'];
+  }
+  status = JSON.stringify(parsedStatus);
 
   return { title, summary, target, features, regions, status };
 }
