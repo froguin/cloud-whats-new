@@ -1,6 +1,7 @@
 ---
 import '../styles/base.css';
 import '../styles/themes.css';
+import { ClientRouter } from 'astro:transitions';
 
 interface Props {
   title: string;
@@ -61,9 +62,10 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
     {structuredDataItems.filter(Boolean).map((item) => (
       <script type="application/ld+json" set:html={JSON.stringify(item)} />
     ))}
+    <ClientRouter />
   </head>
-  <body style="background-color: var(--color-bg); color: var(--color-text-primary); font-family: var(--font-family);" class="transition-colors duration-200">
-    <header style={`background-color: var(--nav-bg); height: var(--nav-height); border-bottom: 1px solid var(--color-border);`}>
+  <body class="transition-colors duration-200">
+    <header>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex justify-between items-center">
         <a href="/" class="text-base sm:text-lg font-bold" style={`color: ${vendor === 'aws' || vendor === 'home' ? '#FFFFFF' : 'var(--color-text-primary)'};`}>
           ☁️ What's New <span class="hidden sm:inline">한국어 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>
@@ -94,26 +96,41 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
       </div>
     </footer>
     <script is:inline>
+      // 1. Run immediately on body parse to prevent dark mode screen flash
       (function() {
-        const html = document.documentElement;
         const isDark = localStorage.getItem('theme') === 'dark' ||
           (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (isDark) html.setAttribute('data-theme', 'dark');
+        if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
+      })();
+    </script>
+    <script>
+      // 2. Bind event listeners on page load and page transition
+      function initThemeToggle() {
+        const html = document.documentElement;
+        const toggle = document.getElementById('theme-toggle');
         const iconDark = document.getElementById('icon-dark');
         const iconLight = document.getElementById('icon-light');
+        if (!toggle || !iconDark || !iconLight) return;
+
         function updateIcons() {
           const dark = html.hasAttribute('data-theme');
           iconDark.classList.toggle('hidden', dark);
           iconLight.classList.toggle('hidden', !dark);
-          document.getElementById('theme-toggle')?.setAttribute('aria-pressed', dark ? 'true' : 'false');
+          toggle.setAttribute('aria-pressed', dark ? 'true' : 'false');
         }
+
         updateIcons();
-        document.getElementById('theme-toggle').addEventListener('click', () => {
+
+        // Bind click handler (using onclick to avoid duplicate listeners on page swap)
+        toggle.onclick = () => {
           html.hasAttribute('data-theme') ? html.removeAttribute('data-theme') : html.setAttribute('data-theme', 'dark');
           localStorage.setItem('theme', html.hasAttribute('data-theme') ? 'dark' : 'light');
           updateIcons();
-        });
-      })();
+        };
+      }
+
+      // Run on initial load and after every View Transition navigation
+      document.addEventListener('astro:page-load', initThemeToggle);
     </script>
   </body>
 </html>

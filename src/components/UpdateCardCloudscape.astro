@@ -13,10 +13,10 @@ try {
 } catch { statuses = status ? [status] : []; }
 
 const statusColors: Record<string, string> = {
-  '정식 출시': 'background:#dcfce7;color:#166534;',
-  '미리보기': 'background:#dbeafe;color:#1e40af;',
-  '베타': 'background:#f3e8ff;color:#6b21a8;',
-  '지원 종료': 'background:#fee2e2;color:#991b1b;',
+  '정식 출시': 'background:var(--status-ga-bg);color:var(--status-ga-text);border:1px solid var(--status-ga-border);',
+  '미리보기': 'background:var(--status-preview-bg);color:var(--status-preview-text);border:1px solid var(--status-preview-border);',
+  '베타': 'background:var(--status-beta-bg);color:var(--status-beta-text);border:1px solid var(--status-beta-border);',
+  '지원 종료': 'background:var(--status-retired-bg);color:var(--status-retired-text);border:1px solid var(--status-retired-border);',
 };
 
 // GCP 4-color rotation
@@ -32,19 +32,36 @@ const hasDetails = !!(target || features || regions);
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class={`aws-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
     style="background:var(--color-surface); border:2px solid var(--color-border); border-radius:8px;">
-    <div class="p-4 sm:p-5">
-      <div class="flex items-center gap-1.5 mb-2 flex-wrap">
-        {isFallback && (<span class="px-1.5 py-0.5 text-xs font-medium" style="border-radius:2px;background:#fef3c7;color:#92400e;">번역 준비중</span>)}
-        {statuses.map(s => <span class="px-1.5 py-0.5 text-xs font-medium" style={`border-radius:2px;${statusColors[s] || ''}`}>{s}</span>)}
-        {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+    <div class="p-4 sm:p-5 flex flex-col h-full justify-between">
+      <div>
+        <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+          {isFallback && (<span class="px-2 py-0.5 text-xs font-semibold" style="border-radius:4px;background:var(--status-fallback-bg);color:var(--status-fallback-text);border:1px solid var(--status-fallback-border);">번역 준비중</span>)}
+          {statuses.map(s => <span class="px-2 py-0.5 text-xs font-semibold" style={`border-radius:4px;${statusColors[s] || ''}`}>{s}</span>)}
+          {date && <time class="text-xs ml-auto font-medium" style="color:var(--color-text-secondary);">{date}</time>}
+        </div>
+        <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
+        <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       </div>
-      <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
-        <div class="mt-3 pt-2 space-y-1 text-xs" style="border-top:1px solid var(--color-border);">
-          {target && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{target}</span></div>}
-          {features && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{features}</span></div>}
-          {regions && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{regions}</span></div>}
+        <div class="mt-4 pt-3 grid grid-cols-3 gap-2 text-left" style="border-top:1px solid var(--color-border);">
+          {target && (
+            <div class="min-w-0">
+              <span class="block text-[10px] font-bold uppercase tracking-wider mb-0.5" style="color:var(--color-text-secondary);">대상</span>
+              <span class="block text-xs font-medium truncate" style="color:var(--color-text-primary);" title={target}>{target}</span>
+            </div>
+          )}
+          {features && (
+            <div class="min-w-0">
+              <span class="block text-[10px] font-bold uppercase tracking-wider mb-0.5" style="color:var(--color-text-secondary);">기능</span>
+              <span class="block text-xs font-medium truncate" style="color:var(--color-text-primary);" title={features}>{features}</span>
+            </div>
+          )}
+          {regions && (
+            <div class="min-w-0">
+              <span class="block text-[10px] font-bold uppercase tracking-wider mb-0.5" style="color:var(--color-text-secondary);">리전</span>
+              <span class="block text-xs font-medium truncate" style="color:var(--color-text-primary);" title={regions}>{regions}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -53,20 +70,40 @@ const hasDetails = !!(target || features || regions);
   <!-- GCP Material 3: rounded, floating, surface-tint + 4-color top border -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class={`gcp-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
-    style={`background:var(--color-surface); border-radius:12px; box-shadow:var(--card-shadow); border-top:3px solid ${gcpAccent}; --gcp-accent:${gcpAccent};`}>
-    <div class="p-4 sm:p-5">
-      <div class="flex items-center gap-1.5 mb-2 flex-wrap">
-        {isFallback && (<span class="px-1.5 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
-        {statuses.map(s => <span class="px-2 py-0.5 rounded-full text-xs font-medium" style={statusColors[s] || ''}>{s}</span>)}
-        {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+    style={`background:var(--color-surface); border-radius:16px; box-shadow:var(--card-shadow); border-top:3.5px solid ${gcpAccent}; --gcp-accent:${gcpAccent};`}>
+    <div class="p-4 sm:p-5 flex flex-col h-full justify-between">
+      <div>
+        <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+          {isFallback && (<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" style="background:var(--status-fallback-bg);color:var(--status-fallback-text);border:1px solid var(--status-fallback-border);">번역 준비중</span>)}
+          {statuses.map(s => <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" style={statusColors[s] || ''}>{s}</span>)}
+          {date && <time class="text-xs ml-auto font-medium" style="color:var(--color-text-secondary);">{date}</time>}
+        </div>
+        <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary); font-family:'Google Sans', var(--font-family); word-break:break-word;">{title}</h3>
+        <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       </div>
-      <h3 class="text-base sm:text-lg font-bold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
-        <div class="mt-3 pt-2 space-y-1 text-xs" style={`border-top:1px solid ${gcpAccent}1F;`}>
-          {target && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{target}</span></div>}
-          {features && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{features}</span></div>}
-          {regions && <div><span class="font-medium" style={`color:${gcpAccent};`}><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span>&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">{regions}</span></div>}
+        <div class="mt-4 pt-3 flex flex-wrap gap-1.5" style={`border-top:1px solid ${gcpAccent}1F;`}>
+          {target && (
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all" 
+              style={`background:color-mix(in srgb, ${gcpAccent} 8%, var(--color-surface)); color:${gcpAccent}; border:1px solid color-mix(in srgb, ${gcpAccent} 20%, transparent);`}>
+              <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+              {target}
+            </span>
+          )}
+          {features && (
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all" 
+              style={`background:color-mix(in srgb, ${gcpAccent} 8%, var(--color-surface)); color:${gcpAccent}; border:1px solid color-mix(in srgb, ${gcpAccent} 20%, transparent);`}>
+              <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>
+              {features}
+            </span>
+          )}
+          {regions && (
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all" 
+              style={`background:color-mix(in srgb, ${gcpAccent} 8%, var(--color-surface)); color:${gcpAccent}; border:1px solid color-mix(in srgb, ${gcpAccent} 20%, transparent);`}>
+              <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+              {regions}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -75,20 +112,46 @@ const hasDetails = !!(target || features || regions);
   <!-- Azure Fluent 2: spacious, shadow depth, left accent -->
   <a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
     id={`article-${Astro.props.articleId}`} class={`azure-card block no-underline overflow-hidden transition-all duration-200${isFallback ? ' card-fallback' : ''}`}
-    style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3px solid var(--color-border); border-radius:4px; box-shadow:var(--card-shadow);">
-    <div class="p-4 sm:p-5">
-      <div class="flex items-center gap-1.5 mb-3 flex-wrap">
-        {isFallback && (<span class="px-1.5 py-0.5 rounded text-xs font-medium" style="background:#fef3c7;color:#92400e;">번역 준비중</span>)}
-        {statuses.map(s => <span class="px-2 py-0.5 rounded text-xs font-semibold" style={statusColors[s] || ''}>{s}</span>)}
-        {date && <time class="text-xs ml-auto" style="color:var(--color-text-secondary);">{date}</time>}
+    style="background:var(--color-surface); border:1px solid var(--color-border); border-left:3.5px solid var(--color-primary); border-radius:4px; box-shadow:var(--card-shadow);">
+    <div class="p-4 sm:p-5 flex flex-col h-full justify-between">
+      <div>
+        <div class="flex items-center gap-1.5 mb-3 flex-wrap">
+          {isFallback && (<span class="px-2 py-0.5 rounded text-xs font-bold" style="background:var(--status-fallback-bg);color:var(--status-fallback-text);border:1px solid var(--status-fallback-border);">번역 준비중</span>)}
+          {statuses.map(s => <span class="px-2 py-0.5 rounded text-xs font-bold" style={statusColors[s] || ''}>{s}</span>)}
+          {date && <time class="text-xs ml-auto font-medium" style="color:var(--color-text-secondary);">{date}</time>}
+        </div>
+        <h3 class="text-base sm:text-lg font-semibold mb-2 leading-snug" style="color:var(--color-text-primary); font-family:var(--font-family); word-break:break-word;">{title}</h3>
+        <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       </div>
-      <h3 class="text-base sm:text-lg font-semibold mb-2 leading-snug" style="color:var(--color-text-primary);word-break:break-word;">{title}</h3>
-      <p class={`text-sm leading-relaxed ${isFallback ? 'line-clamp-3' : ''}`} style="color:var(--color-text-secondary);">{content}</p>
       {hasDetails && (
-        <div class="mt-3 pt-2 space-y-1 text-xs" style="border-top:1px solid var(--color-border);">
-          {target && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>대상</span> <span class="ml-2" style="color:var(--color-text-secondary);">{target}</span></div>}
-          {features && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>기능</span> <span class="ml-2" style="color:var(--color-text-secondary);">{features}</span></div>}
-          {regions && <div><span class="font-semibold" style="color:var(--color-primary);"><svg class="inline w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>리전</span> <span class="ml-2" style="color:var(--color-text-secondary);">{regions}</span></div>}
+        <div class="mt-4 pt-3 space-y-1.5 text-xs" style="border-top:1px solid var(--color-border);">
+          {target && (
+            <div class="flex items-center gap-2 pb-1" style="border-bottom: 1px dashed var(--color-border);">
+              <span class="inline-flex items-center gap-1 font-semibold shrink-0" style="color:var(--color-primary);">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+                대상
+              </span>
+              <span class="truncate ml-auto" style="color:var(--color-text-secondary);">{target}</span>
+            </div>
+          )}
+          {features && (
+            <div class="flex items-center gap-2 pb-1" style="border-bottom: 1px dashed var(--color-border);">
+              <span class="inline-flex items-center gap-1 font-semibold shrink-0" style="color:var(--color-primary);">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/></svg>
+                기능
+              </span>
+              <span class="truncate ml-auto" style="color:var(--color-text-secondary);">{features}</span>
+            </div>
+          )}
+          {regions && (
+            <div class="flex items-center gap-2 pb-0.5">
+              <span class="inline-flex items-center gap-1 font-semibold shrink-0" style="color:var(--color-primary);">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                리전
+              </span>
+              <span class="truncate ml-auto" style="color:var(--color-text-secondary);">{regions}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -96,9 +159,9 @@ const hasDetails = !!(target || features || regions);
 )}
 
 <style>
-  .aws-card:hover,   .aws-card.card-active   { border-color: var(--color-primary) !important; background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)) !important; }
-  .gcp-card:hover,   .gcp-card.card-active   { box-shadow: var(--card-hover-shadow) !important; transform: translateY(-2px); background: color-mix(in srgb, var(--gcp-accent) 4%, var(--color-surface)) !important; }
-  .azure-card:hover, .azure-card.card-active { border-color: var(--color-primary) !important; border-left-color: var(--color-primary) !important; box-shadow: var(--card-hover-shadow) !important; }
+  .aws-card:hover,   .aws-card.card-active   { border-color: var(--color-primary) !important; background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)) !important; }
+  .gcp-card:hover,   .gcp-card.card-active   { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1) !important; transform: translateY(-3px) scale(1.01); background: color-mix(in srgb, var(--gcp-accent) 2%, var(--color-surface)) !important; }
+  .azure-card:hover, .azure-card.card-active { border-color: var(--color-primary) !important; border-left-color: var(--color-primary) !important; box-shadow: 0 8px 16px -4px rgba(0,0,0,0.1) !important; transform: translateY(-2px); }
 
   /* Fallback(번역 준비중) 카드만 hover/active 시 clamp 해제 */
   .card-fallback:hover .line-clamp-3,
@@ -116,90 +179,95 @@ const hasDetails = !!(target || features || regions);
 </style>
 
 <script>
-  // Context menu: permalink copy (desktop right-click, mobile long-press)
-  const ctxMenu = document.createElement('div');
-  ctxMenu.id = 'card-ctx-menu';
-  ctxMenu.innerHTML = '<button id="ctx-copy-link">🔗 퍼머링크 복사</button><button id="ctx-copy-id">📋 ID 복사</button>';
-  ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:140px;';
-  ctxMenu.querySelectorAll('button').forEach(b => b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--color-text-primary);border-radius:4px;');
-  ctxMenu.querySelectorAll('button').forEach(b => { b.onmouseenter = () => b.style.background = 'var(--color-border)'; b.onmouseleave = () => b.style.background = 'none'; });
-  document.body.appendChild(ctxMenu);
+  document.addEventListener('astro:page-load', () => {
+    // Context menu: permalink copy (desktop right-click, mobile long-press)
+    const existingMenu = document.getElementById('card-ctx-menu');
+    if (existingMenu) existingMenu.remove();
 
-  let ctxTarget: { permalink: string; id: string } | null = null;
+    const ctxMenu = document.createElement('div');
+    ctxMenu.id = 'card-ctx-menu';
+    ctxMenu.innerHTML = '<button id="ctx-copy-link">🔗 퍼머링크 복사</button><button id="ctx-copy-id">📋 ID 복사</button>';
+    ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:140px;';
+    ctxMenu.querySelectorAll('button').forEach(b => b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--color-text-primary);border-radius:4px;');
+    ctxMenu.querySelectorAll('button').forEach(b => { b.onmouseenter = () => b.style.background = 'var(--color-border)'; b.onmouseleave = () => b.style.background = 'none'; });
+    document.body.appendChild(ctxMenu);
 
-  function showCtxMenu(x: number, y: number, permalink: string, id: string) {
-    ctxTarget = { permalink, id };
-    const mw = ctxMenu.offsetWidth || 160;
-    const mh = ctxMenu.offsetHeight || 80;
-    ctxMenu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
-    ctxMenu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
-    ctxMenu.style.display = 'block';
-  }
+    let ctxTarget: { permalink: string; id: string } | null = null;
 
-  function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxTarget = null; }
+    function showCtxMenu(x: number, y: number, permalink: string, id: string) {
+      ctxTarget = { permalink, id };
+      const mw = ctxMenu.offsetWidth || 160;
+      const mh = ctxMenu.offsetHeight || 80;
+      ctxMenu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
+      ctxMenu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+      ctxMenu.style.display = 'block';
+    }
 
-  function showToast(msg: string) {
-    const t = document.createElement('div');
-    t.textContent = msg;
-    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10000;opacity:0;transition:opacity .2s;';
-    document.body.appendChild(t);
-    requestAnimationFrame(() => t.style.opacity = '1');
-    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 200); }, 1500);
-  }
+    function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxTarget = null; }
 
-  async function copyText(text: string, label: string) {
-    try { await navigator.clipboard.writeText(text); showToast(`${label} 복사됨`); }
-    catch { showToast('복사 실패'); }
-    hideCtxMenu();
-  }
+    function showToast(msg: string) {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10000;opacity:0;transition:opacity .2s;';
+      document.body.appendChild(t);
+      requestAnimationFrame(() => t.style.opacity = '1');
+      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 200); }, 1500);
+    }
 
-  document.getElementById('ctx-copy-link')!.addEventListener('click', () => ctxTarget && copyText(ctxTarget.permalink, '퍼머링크'));
-  document.getElementById('ctx-copy-id')!.addEventListener('click', () => ctxTarget && copyText(ctxTarget.id, 'ID'));
-  document.addEventListener('click', (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); });
+    async function copyText(text: string, label: string) {
+      try { await navigator.clipboard.writeText(text); showToast(`${label} 복사됨`); }
+      catch { showToast('복사 실패'); }
+      hideCtxMenu();
+    }
 
-  function getCardInfo(card: HTMLElement) {
-    const id = card.id?.replace('article-', '') || '';
-    const csp = window.location.pathname.replace('/', '') || 'aws';
-    const permalink = `${window.location.origin}/${csp}#${card.id}`;
-    return { id, permalink };
-  }
+    document.getElementById('ctx-copy-link')!.onclick = () => ctxTarget && copyText(ctxTarget.permalink, '퍼머링크');
+    document.getElementById('ctx-copy-id')!.onclick = () => ctxTarget && copyText(ctxTarget.id, 'ID');
+    document.onclick = (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); };
 
-  // Desktop: right-click
-  document.querySelectorAll<HTMLElement>('.aws-card,.gcp-card,.azure-card').forEach(card => {
-    card.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const info = getCardInfo(card);
-      showCtxMenu(e.clientX, e.clientY, info.permalink, info.id);
-    });
-  });
+    function getCardInfo(card: HTMLElement) {
+      const id = card.id?.replace('article-', '') || '';
+      const csp = window.location.pathname.replace('/', '') || 'aws';
+      const permalink = `${window.location.origin}/${csp}#${card.id}`;
+      return { id, permalink };
+    }
 
-  // Mobile: long-press (500ms) + first tap expands, second tap navigates
-  let longPressTimer: ReturnType<typeof setTimeout>;
-  if ('ontouchstart' in window) {
-    document.querySelectorAll<HTMLAnchorElement>('.aws-card,.gcp-card,.azure-card').forEach((card) => {
-      let expanded = false;
-      let longPressed = false;
-      card.addEventListener('touchstart', (e) => {
-        longPressed = false;
-        longPressTimer = setTimeout(() => {
-          longPressed = true;
-          const touch = e.touches[0];
-          const info = getCardInfo(card);
-          showCtxMenu(touch.clientX, touch.clientY, info.permalink, info.id);
-        }, 500);
-      }, { passive: true });
-      card.addEventListener('touchend', () => clearTimeout(longPressTimer));
-      card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
-      card.addEventListener('click', (e) => {
-        if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
-        if (!expanded && card.classList.contains('card-fallback')) {
-          e.preventDefault();
-          card.querySelectorAll<HTMLElement>('.line-clamp-3').forEach((el) => {
-            el.style.webkitLineClamp = 'unset';
-          });
-          expanded = true;
-        }
+    // Desktop: right-click
+    document.querySelectorAll<HTMLElement>('.aws-card,.gcp-card,.azure-card').forEach(card => {
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const info = getCardInfo(card);
+        showCtxMenu(e.clientX, e.clientY, info.permalink, info.id);
       });
     });
-  }
+
+    // Mobile: long-press (500ms) + first tap expands, second tap navigates
+    let longPressTimer: ReturnType<typeof setTimeout>;
+    if ('ontouchstart' in window) {
+      document.querySelectorAll<HTMLAnchorElement>('.aws-card,.gcp-card,.azure-card').forEach((card) => {
+        let expanded = false;
+        let longPressed = false;
+        card.addEventListener('touchstart', (e) => {
+          longPressed = false;
+          longPressTimer = setTimeout(() => {
+            longPressed = true;
+            const touch = e.touches[0];
+            const info = getCardInfo(card);
+            showCtxMenu(touch.clientX, touch.clientY, info.permalink, info.id);
+          }, 500);
+        }, { passive: true });
+        card.addEventListener('touchend', () => clearTimeout(longPressTimer));
+        card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+        card.addEventListener('click', (e) => {
+          if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
+          if (!expanded && card.classList.contains('card-fallback')) {
+            e.preventDefault();
+            card.querySelectorAll<HTMLElement>('.line-clamp-3').forEach((el) => {
+              el.style.webkitLineClamp = 'unset';
+            });
+            expanded = true;
+          }
+        });
+      });
+    }
+  });
 </script>

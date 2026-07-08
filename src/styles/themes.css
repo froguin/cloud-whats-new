@@ -1,6 +1,51 @@
 @import "./segoe-ui.css";
 @import "./google-sans-text.css";
 @import "./amazon-ember.css";
+
+:root {
+  --status-ga-bg: rgba(22, 163, 74, 0.08);
+  --status-ga-text: #166534;
+  --status-ga-border: rgba(22, 163, 74, 0.2);
+  
+  --status-preview-bg: rgba(59, 130, 246, 0.08);
+  --status-preview-text: #1e40af;
+  --status-preview-border: rgba(59, 130, 246, 0.2);
+  
+  --status-beta-bg: rgba(168, 85, 247, 0.08);
+  --status-beta-text: #6b21a8;
+  --status-beta-border: rgba(168, 85, 247, 0.2);
+  
+  --status-retired-bg: rgba(239, 68, 68, 0.08);
+  --status-retired-text: #991b1b;
+  --status-retired-border: rgba(239, 68, 68, 0.2);
+
+  --status-fallback-bg: rgba(245, 158, 11, 0.08);
+  --status-fallback-text: #b45309;
+  --status-fallback-border: rgba(245, 158, 11, 0.2);
+}
+
+[data-theme="dark"] {
+  --status-ga-bg: rgba(74, 222, 128, 0.12);
+  --status-ga-text: #86efac;
+  --status-ga-border: rgba(74, 222, 128, 0.25);
+  
+  --status-preview-bg: rgba(96, 165, 250, 0.12);
+  --status-preview-text: #93c5fd;
+  --status-preview-border: rgba(96, 165, 250, 0.25);
+  
+  --status-beta-bg: rgba(192, 132, 252, 0.12);
+  --status-beta-text: #d8b4fe;
+  --status-beta-border: rgba(192, 132, 252, 0.25);
+  
+  --status-retired-bg: rgba(248, 113, 113, 0.12);
+  --status-retired-text: #fca5a5;
+  --status-retired-border: rgba(248, 113, 113, 0.25);
+
+  --status-fallback-bg: rgba(251, 191, 36, 0.12);
+  --status-fallback-text: #fde047;
+  --status-fallback-border: rgba(251, 191, 36, 0.25);
+}
+
 /* ============================================
    Home — neutral, hub feel
    ============================================ */
@@ -102,6 +147,19 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--nav-height);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background-color: color-mix(in srgb, var(--nav-bg) 85%, transparent) !important;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
 /* Nav accent details */
@@ -124,6 +182,11 @@ a:focus-visible, button:focus-visible {
   outline: 3px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Card hover animation defaults */
+.aws-card, .gcp-card, .azure-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
 }
 
 /* Card press feedback */
