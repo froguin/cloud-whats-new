@@ -79,14 +79,14 @@
   --font-weight-title: 700;
   --radius: 8px; --nav-bg: #232F3E; --nav-height: 56px;
   --card-shadow: none; --card-hover-shadow: none;
-  --card-border: 2px solid #D5DBDB;
-  --card-hover-border: 2px solid #879596;
+  --card-border: 1px solid #D5DBDB;
+  --card-hover-border: 1px solid #879596;
 }
 [data-vendor="aws"][data-theme="dark"] {
   --color-primary: #539FE5; --color-accent: #FF9900;
   --color-bg: #16191f; --color-surface: #232730; --color-border: #303846;
   --color-text-primary: #eaeded; --color-text-secondary: #aab7c4;
-  --nav-bg: #16191f; --card-border: 2px solid #303846; --card-hover-border: 2px solid #539FE5;
+  --nav-bg: #16191f; --card-border: 1px solid #303846; --card-hover-border: 1px solid #539FE5;
 }
 
 /* ============================================
