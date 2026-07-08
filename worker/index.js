@@ -723,6 +723,32 @@ function applyDeterministicFixes(record, row) {
   } catch {
     parsedStatus = Array.isArray(status) ? status : [status || ''];
   }
+  if (!Array.isArray(parsedStatus)) {
+    parsedStatus = [String(parsedStatus)];
+  }
+
+  const ALLOWED_STATUSES = ['정식 출시', '미리보기', '베타', '지원 종료'];
+  let validatedStatus = [];
+  for (const s of parsedStatus) {
+    const str = String(s).trim();
+    if (ALLOWED_STATUSES.includes(str)) {
+      validatedStatus.push(str);
+    } else {
+      // Try to extract standard status from raw LLM sentence/text
+      const lower = str.toLowerCase();
+      if (lower.includes('지원 종료') || lower.includes('종료') || lower.includes('퇴역') || lower.includes('retire') || lower.includes('deprecate') || lower.includes('retirement')) {
+        validatedStatus.push('지원 종료');
+      } else if (lower.includes('미리보기') || lower.includes('preview')) {
+        validatedStatus.push('미리보기');
+      } else if (lower.includes('베타') || lower.includes('beta')) {
+        validatedStatus.push('베타');
+      } else if (lower.includes('정식 출시') || lower.includes('ga') || lower.includes('launch') || lower.includes('released')) {
+        validatedStatus.push('정식 출시');
+      }
+    }
+  }
+  parsedStatus = [...new Set(validatedStatus)];
+
   const descLower = String(row.description_en || '').toLowerCase();
   const titleLower = String(row.title_en || '').toLowerCase();
 
