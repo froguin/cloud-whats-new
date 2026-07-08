@@ -7,63 +7,112 @@ const RSS_FEEDS = {
 const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
-const TRANSLATION_RULES = `- Keep product names, versions, dates, region codes in English as-is.
-- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
+const LANG_PROFILES = {
+  ko: {
+    name: 'Korean',
+    nameLocal: '한국어',
+    statuses: ['정식 출시', '미리보기', '베타', '지원 종료'],
+    statusMap: { ga: '정식 출시', preview: '미리보기', beta: '베타', retire: '지원 종료' },
+    rules: `- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
 - Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
 - Summary: Exactly 2 sentences in natural, technical Korean.
   - First sentence: Describe the key technical change, including specific product names, features, or metrics. Avoid vague descriptions.
   - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
-  - Do NOT use generic template expressions like "이를 통해 효율성이 향상됩니다" or simply repeating the title. Write in a concise, informative style suited for developers.
-- Status determination: Must be determined from the description context. Choose from: "정식 출시", "미리보기", "베타", "지원 종료".
-  - Default: "정식 출시" (Default status for general availability, GA, launched, now available, or standard updates).
-  - "미리보기" (Preview / Public Preview / In preview): If the description explicitly states the service/feature is in "preview". Note: AWS and Azure almost always use "Preview" for pre-release features.
-  - "베타" (Beta / Public Beta): Only if the service is explicitly described as "beta" (mainly Google Cloud or third-party products like Anthropic). Never label AWS or Azure services as "베타" unless the word "beta" is explicitly present in the original text.
-  - "지원 종료" (Retired / Deprecated / End of Support): If the service/feature is being retired, deprecated, or disabled.
-  - Avoid false positives: version numbers containing "-beta" or "preview" (e.g., Kubernetes v1.30-beta.0) are version strings, NOT the release status of the cloud service itself. Set the status of such version updates to "정식 출시" unless the service itself is in preview/beta.
+  - Do NOT use generic template expressions like "이를 통해 효율성이 향상됩니다" or simply repeating the title.
+- Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자".
+- Regions: Vendor standard Korean region names or "모든 리전".`,
+    sysPrompt: 'You are a Korean cloud news summarizer for IT professionals.'
+  },
+  en: {
+    name: 'English',
+    nameLocal: 'English',
+    statuses: ['General Availability', 'Preview', 'Beta', 'End of Support'],
+    statusMap: { ga: 'General Availability', preview: 'Preview', beta: 'Beta', retire: 'End of Support' },
+    rules: `- Output everything in clear, concise technical English.
+- Title: Product name + core change, max 60 characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
+- Summary: Exactly 2 sentences in natural, technical English.
+  - First sentence: Describe the key technical change, including specific product names, features, or metrics. Avoid vague descriptions.
+  - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
+  - Do NOT use generic template expressions like "This improves efficiency" or simply repeating the title.
+- Target: A specific target audience (e.g., "Backend developers building serverless applications on AWS Lambda"). Avoid generic targets like "all users".
+- Regions: Vendor standard English region names or "All regions".`,
+    sysPrompt: 'You are an English cloud news summarizer for IT professionals.'
+  },
+  ja: {
+    name: 'Japanese',
+    nameLocal: '日本語',
+    statuses: ['一般提供', 'プレビュー', 'ベータ', 'サポート終了'],
+    statusMap: { ga: '一般提供', preview: 'プレビュー', beta: 'ベータ', retire: 'サポート終了' },
+    rules: `- Translate ALL English to Japanese. Never mix.
+- Title: Product name + core change, max 40 Japanese characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
+- Summary: Exactly 2 sentences in natural, technical Japanese.
+  - First sentence: Describe the key technical change, including specific product names, features, or metrics. Avoid vague descriptions.
+  - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
+  - Do NOT use generic template expressions like "これにより効率が向上します".
+- Target: A specific target audience (e.g., "AWS Lambdaを使用するバックエンド開発者"). Avoid generic targets like "すべてのユーザー".
+- Regions: Vendor standard Japanese region names or "すべてのリージョン".`,
+    sysPrompt: 'You are a Japanese cloud news summarizer for IT professionals.'
+  }
+};
+
+function getTranslationPrompt(lang) {
+  const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
+  const isKo = lang === 'ko';
+  const isJa = lang === 'ja';
+  
+  const translationRules = `- Keep product names, versions, dates, region codes in English as-is.
+${profile.rules}
+- Status determination: Must be determined from the description context. Choose from: ${profile.statuses.map(s => `"${s}"`).join(', ')}.
+  - Default: "${profile.statuses[0]}" (Default status for general availability, GA, launched, now available, or standard updates).
+  - "${profile.statuses[1]}" (Preview / Public Preview / In preview): If the description explicitly states the service/feature is in "preview". Note: AWS and Azure almost always use "Preview" for pre-release features.
+  - "${profile.statuses[2]}" (Beta / Public Beta): Only if the service is explicitly described as "beta" (mainly Google Cloud or third-party products like Anthropic). Never label AWS or Azure services as "${profile.statuses[2]}" unless the word "beta" is explicitly present in the original text.
+  - "${profile.statuses[3]}" (Retired / Deprecated / End of Support): If the service/feature is being retired, deprecated, or disabled.
+  - Avoid false positives: version numbers containing "-beta" or "preview" (e.g., Kubernetes v1.30-beta.0) are version strings, NOT the release status of the cloud service itself. Set the status of such version updates to "${profile.statuses[0]}" unless the service itself is in preview/beta.
 - Features: Exactly 3 key technical capabilities or changes introduced, separated by commas. Focus on concrete technical facts (e.g. new APIs, supported versions, pricing changes, or limit increases) rather than high-level marketing descriptions.
-- Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자" or "모든 사용자".
-- Regions: Vendor standard Korean region names or "모든 리전".
-- GCP date entries: YYYY년 M월 D일: main product 외 N건
+- GCP date entries: ${isKo ? 'YYYY년 M월 D일: main product 외 N건' : isJa ? 'YYYY年M月D日: main productほかN件' : 'YYYY-MM-DD: main product and N other updates'}
 - MUST KEEP ENTITIES in user message — reproduce exactly.`;
 
-const SYSTEM_PROMPT = `You are a Korean cloud news summarizer for IT professionals.
+  const sysPrompt = `${profile.sysPrompt}
 
 OUTPUT: valid JSON only, no markdown wrapping.
 
 PROCESS — follow this order:
-1. Read the Description and summarize in Korean (2 sentences: what changed + why it matters).
-2. From the summary, derive a short Korean title: product name + core change.
+1. Read the Description and summarize in ${profile.nameLocal} (2 sentences: what changed + why it matters).
+2. From the summary, derive a short ${profile.nameLocal} title: product name + core change.
 3. Determine status from description content.
 4. Fill target (who benefits), features (3 capability descriptions), regions.
 
 RULES:
-${TRANSLATION_RULES}`;
+${translationRules}`;
 
-const REVIEW_PROMPT = `You review Korean cloud news cards. Your job is to find exactly 3 errors or issues in the translation. Compare the translated fields against the original English and check these rules:
+  return { sysPrompt, rules: translationRules, profile };
+}
 
-${TRANSLATION_RULES}
-
-Find and fix these specific problems:
-1. Chinese characters (漢字), Japanese kana, or any non-Korean/English/number characters
-2. Hallucinated content not in the original English
-3. Garbled, truncated, or unnaturally machine-translated text
-4. Status field contradicting the description context
-5. Title that is too vague, incomplete, or mirrors the English too closely
-
-OUTPUT JSON with corrected fields only. Omit fields that are correct.
-{"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
-If you cannot find any real errors after thorough review, output: {"pass":true}`;
-
-const FEW_SHOT = [
-  // AWS: standard single-product update
+const FEW_SHOT_KO = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
   { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"Python 3.13 런타임 선택 가능, 오류 메시지 개선, 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
-  // GCP: multi-product date-based entry
   { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
   { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 1건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 Cloud Composer 3으로 전환이 필요합니다. Compute Engine에서는 CVE-2026-23268 보안 취약점이 패치되었습니다.","target":"australia-southeast2 리전에서 Cloud Composer를 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Composer 2 생성 중단, CVE-2026-23268 패치 적용, Composer 3 전환 필요","regions":"australia-southeast2, 모든 리전","status":["정식 출시"]}' },
-  // Azure: preview status from description — title tag goes to status field
   { role: 'user', content: 'Title: [Preview] Azure Cosmos DB continuous backup for analytical store\nDescription: Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
-  { role: 'assistant', content: '{"title":"Azure Cosmos DB 분석 저장소 연속 백업 지원","summary":"Azure Cosmos DB 분석 저장소에서 연속 백업과 특정 시점 복원이 가능해졌습니다. 분석 워크로드의 데이터 보호가 한층 강화됩니다.","target":"Azure Cosmos DB 분석 저장소를 운영하는 데이터 엔지니어","features":"분석 저장소 연속 백업, 특정 시점 복원, 데이터 보호 강화","regions":"모든 Azure 퍼블릭 리전","status":["미리보기"]}' },
+  { role: 'assistant', content: '{"title":"Azure Cosmos DB 분석 저장소 연속 백업 지원","summary":"Azure Cosmos DB 분석 저장소에서 연속 백업과 특정 시점 복원이 가능해졌습니다. 분석 워크로드의 데이터 보호가 한층 강화됩니다.","target":"Azure Cosmos DB 분석 저장소를 운영하는 데이터 엔지니어","features":"분석 저장소 연속 백업, 특정 시점 복원, 데이터 보호 강화","regions":"모든 Azure 퍼블릭 리전","status":["미리보기"]}' }
+];
+
+const FEW_SHOT_EN = [
+  { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
+  { role: 'assistant', content: '{"title":"AWS Lambda adds support for Python 3.13 runtime","summary":"Developers can now use Python 3.13 to build and run Lambda functions, leveraging new features like improved error messages, an interactive REPL, and performance optimizations. If you are running existing Python 3.12 functions, it is time to plan runtime upgrades.","target":"Backend developers building serverless applications on AWS Lambda using Python","features":"Support for Python 3.13 runtime, improved error reporting, faster cold starts","regions":"All AWS Regions","status":["General Availability"]}' },
+  { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
+  { role: 'assistant', content: '{"title":"March 27, 2026: Cloud Composer and 1 other update","summary":"Creation of Cloud Composer 2 environments has been disabled in the Melbourne region, necessitating migration to Cloud Composer 3. Additionally, a security vulnerability (CVE-2026-23268) has been patched in Compute Engine.","target":"Data engineers running Cloud Composer environments in australia-southeast2","features":"Melbourne Composer 2 creation disabled, CVE-2026-23268 security patch, migration to Composer 3 required","regions":"australia-southeast2, All regions","status":["General Availability"]}' },
+  { role: 'user', content: 'Title: [Preview] Azure Cosmos DB continuous backup for analytical store\nDescription: Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
+  { role: 'assistant', content: '{"title":"Azure Cosmos DB supports continuous backup for analytical store","summary":"Azure Cosmos DB analytical store now supports continuous backup and point-in-time restore capabilities. This ensures enhanced data protection and recovery for analytical workloads.","target":"Data engineers managing Azure Cosmos DB analytical stores","features":"Analytical store continuous backup, point-in-time restore, enhanced data protection","regions":"All public Azure regions","status":["Preview"]}' }
+];
+
+const FEW_SHOT_JA = [
+  { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
+  { role: 'assistant', content: '{"title":"AWS LambdaがPython 3.13ランタイムのサポートを開始","summary":"Lambda関数で改善されたエラーメッセージや新しいREPL, パフォーマンス向上など、Python 3.13の主要機能を直接利用できるようになりました。既存のPython 3.12関数を運用している場合は、ランタイムのアップグレードを検討するタイミングです。","target":"LambdaベースのサーバーレスバックエンドをPythonで構築するバックエンド開発者","features":"Python 3.13ランタイム選択可能, エラーメッセージの改善, コールドスタート短縮の期待","regions":"Lambdaが提供されるすべてのAWSリージョン","status":["一般提供"]}' },
+  { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
+  { role: 'assistant', content: '{"title":"2026年3月27日: Cloud Composerほか1件","summary":"メルボルンリージョンでのCloud Composer 2環境の新設が停止され、Cloud Composer 3への移行が必要となります。また、Compute Engineにおいて脆弱性（CVE-2026-23268）のセキュリティパッチが適用されました。","target":"australia-southeast2リージョンでCloud Composerを運用するデータエンジニア","features":"メルボルンリージョンでのComposer 2新設停止, CVE-2026-23268のパッチ適用, Composer 3への移行推奨","regions":"australia-southeast2, すべてのリージョン","status":["一般提供"]}' },
+  { role: 'user', content: 'Title: [Preview] Azure Cosmos DB continuous backup for analytical store\nDescription: Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
+  { role: 'assistant', content: '{"title":"Azure Cosmos DBの分析ストア連続バックアップをサポート","summary":"Azure Cosmos DBの分析ストアにおいて、連続バックアップとポイントインタイム復元が可能になりました。分析ワークロードのデータ保護が大幅に強化されます。","target":"Azure Cosmos DB分析ストアを運用するデータエンジニア","features":"分析ストア連続バックアップ, ポイントインタイム復元, データ保護の強化","regions":"すべてのAzureパブリックリージョン","status":["プレビュー"]}' }
 ];
 
 const DEFAULT_QUEUE_LANG = 'ko';
@@ -91,60 +140,118 @@ function buildBadQualityFilter() {
 }
 
 const REGION_DISPLAY_MAP = {
-  aws: {
-    'Asia Pacific (New Zealand)': '아시아 태평양(뉴질랜드) 리전',
-    'Asia Pacific (Tokyo)': '아시아 태평양(도쿄) 리전',
-    'Asia Pacific (Seoul)': '아시아 태평양(서울) 리전',
-    'Asia Pacific (Osaka)': '아시아 태평양(오사카) 리전',
-    'Asia Pacific (Sydney)': '아시아 태평양(시드니) 리전',
-    'Asia Pacific (Melbourne)': '아시아 태평양(멜버른) 리전',
-    'Asia Pacific (Jakarta)': '아시아 태평양(자카르타) 리전',
-    'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이) 리전',
-    'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩) 리전',
-    'Asia Pacific (Singapore)': '아시아 태평양(싱가포르) 리전',
-    'Europe (Ireland)': '유럽(아일랜드) 리전',
-    'Europe (London)': '유럽(런던) 리전',
-    'Europe (Frankfurt)': '유럽(프랑크푸르트) 리전',
-    'Europe (Paris)': '유럽(파리) 리전',
-    'Europe (Stockholm)': '유럽(스톡홀름) 리전',
-    'Europe (Zurich)': '유럽(취리히) 리전',
-    'US East (N. Virginia)': '미국 동부(버지니아 북부) 리전',
-    'US East (Ohio)': '미국 동부(오하이오) 리전',
-    'US West (Oregon)': '미국 서부(오리건) 리전',
-    'US West (N. California)': '미국 서부(캘리포니아 북부) 리전',
-    'South America (Sao Paulo)': '남아메리카(상파울루) 리전',
-    'Middle East (UAE)': '중동(UAE) 리전',
-    'Middle East (Bahrain)': '중동(바레인) 리전',
-    'Africa (Cape Town)': '아프리카(케이프타운) 리전',
-    'Canada (Central)': '캐나다(중부) 리전',
+  ko: {
+    aws: {
+      'Asia Pacific (New Zealand)': '아시아 태평양(뉴질랜드) 리전',
+      'Asia Pacific (Tokyo)': '아시아 태평양(도쿄) 리전',
+      'Asia Pacific (Seoul)': '아시아 태평양(서울) 리전',
+      'Asia Pacific (Osaka)': '아시아 태평양(오사카) 리전',
+      'Asia Pacific (Sydney)': '아시아 태평양(시드니) 리전',
+      'Asia Pacific (Melbourne)': '아시아 태평양(멜버른) 리전',
+      'Asia Pacific (Jakarta)': '아시아 태평양(자카르타) 리전',
+      'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이) 리전',
+      'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩) 리전',
+      'Asia Pacific (Singapore)': '아시아 태평양(싱가포르) 리전',
+      'Europe (Ireland)': '유럽(아일랜드) 리전',
+      'Europe (London)': '유럽(런던) 리전',
+      'Europe (Frankfurt)': '유럽(프랑크푸르트) 리전',
+      'Europe (Paris)': '유럽(파리) 리전',
+      'Europe (Stockholm)': '유럽(스톡홀름) 리전',
+      'Europe (Zurich)': '유럽(취리히) 리전',
+      'US East (N. Virginia)': '미국 동부(버지니아 북부) 리전',
+      'US East (Ohio)': '미국 동부(오하이오) 리전',
+      'US West (Oregon)': '미국 서부(오리건) 리전',
+      'US West (N. California)': '미국 서부(캘리포니아 북부) 리전',
+      'South America (Sao Paulo)': '남아메리카(상파울루) 리전',
+      'Middle East (UAE)': '중동(UAE) 리전',
+      'Middle East (Bahrain)': '중동(바레인) 리전',
+      'Africa (Cape Town)': '아프리카(케이프타운) 리전',
+      'Canada (Central)': '캐나다(중부) 리전',
+    },
+    gcp: {
+      'asia-northeast3': '서울 리전',
+      'asia-northeast1': '도쿄 리전',
+      'asia-southeast1': '싱가포르 리전',
+      'australia-southeast1': '시드니 리전',
+      'australia-southeast2': '멜버른 리전',
+      'us': 'US 멀티 리전',
+      'eu': 'EU 멀티 리전',
+    },
+    azure: {
+      'New Zealand North': '뉴질랜드 북부',
+      'Korea Central': '한국 중부',
+      'Korea South': '한국 남부',
+      'Japan East': '일본 동부',
+      'Japan West': '일본 서부',
+      'Australia East': '오스트레일리아 동부',
+      'Australia Southeast': '오스트레일리아 남동부',
+      'Denmark East': '덴마크 동부',
+      'Denmark West': '덴마크 서부',
+      'East US': '미국 동부',
+      'East US 2': '미국 동부 2',
+      'West US': '미국 서부',
+      'West US 2': '미국 서부 2',
+      'West US 3': '미국 서부 3',
+      'North Europe': '북유럽',
+      'West Europe': '서유럽',
+    }
   },
-  gcp: {
-    'asia-northeast3': '서울 리전',
-    'asia-northeast1': '도쿄 리전',
-    'asia-southeast1': '싱가포르 리전',
-    'australia-southeast1': '시드니 리전',
-    'australia-southeast2': '멜버른 리전',
-    'us': 'US 멀티 리전',
-    'eu': 'EU 멀티 리전',
-  },
-  azure: {
-    'New Zealand North': '뉴질랜드 북부',
-    'Korea Central': '한국 중부',
-    'Korea South': '한국 남부',
-    'Japan East': '일본 동부',
-    'Japan West': '일본 서부',
-    'Australia East': '오스트레일리아 동부',
-    'Australia Southeast': '오스트레일리아 남동부',
-    'Denmark East': '덴마크 동부',
-    'Denmark West': '덴마크 서부',
-    'East US': '미국 동부',
-    'East US 2': '미국 동부 2',
-    'West US': '미국 서부',
-    'West US 2': '미국 서부 2',
-    'West US 3': '미국 서부 3',
-    'North Europe': '북유럽',
-    'West Europe': '서유럽',
-  },
+  ja: {
+    aws: {
+      'Asia Pacific (New Zealand)': 'アジア太平洋 (ニュージーランド) リージョン',
+      'Asia Pacific (Tokyo)': 'アジア太平洋 (東京) リージョン',
+      'Asia Pacific (Seoul)': 'アジア太平洋 (ソウル) リージョン',
+      'Asia Pacific (Osaka)': 'アジア太平洋 (大阪) リージョン',
+      'Asia Pacific (Sydney)': 'アジア太平洋 (シドニー) リージョン',
+      'Asia Pacific (Melbourne)': 'アジア太平洋 (メルボルン) リージョン',
+      'Asia Pacific (Jakarta)': 'アジア太平洋 (ジャカルタ) リージョン',
+      'Asia Pacific (Mumbai)': 'アジア太平洋 (ムンバイ) リージョン',
+      'Asia Pacific (Hong Kong)': 'アジア太平洋 (香港) リージョン',
+      'Asia Pacific (Singapore)': 'アジア太平洋 (シンガポール) リージョン',
+      'Europe (Ireland)': '欧州 (アイルランド) リージョン',
+      'Europe (London)': '欧州 (ロンドン) リージョン',
+      'Europe (Frankfurt)': '欧州 (フランクフルト) リージョン',
+      'Europe (Paris)': '欧州 (パリ) リージョン',
+      'Europe (Stockholm)': '欧州 (ストックホルム) リージョン',
+      'Europe (Zurich)': '欧州 (チューリッヒ) リージョン',
+      'US East (N. Virginia)': '米国東部 (バージニア北部) リージョン',
+      'US East (Ohio)': '米国東部 (オハイオ) リージョン',
+      'US West (Oregon)': '米国西部 (オレゴン) リージョン',
+      'US West (N. California)': '米国西部 (北カリフォルニア) リージョン',
+      'South America (Sao Paulo)': '南米 (サンパウロ) リージョン',
+      'Middle East (UAE)': '中東 (UAE) リージョン',
+      'Middle East (Bahrain)': '中東 (バーレーン) リージョン',
+      'Africa (Cape Town)': 'アフリカ (ケープタウン) リージョン',
+      'Canada (Central)': 'カナダ (中部) リージョン',
+    },
+    gcp: {
+      'asia-northeast3': 'ソウル リージョン',
+      'asia-northeast1': '東京 リージョン',
+      'asia-southeast1': 'シンガポール リージョン',
+      'australia-southeast1': 'シドニー リージョン',
+      'australia-southeast2': 'メルボルン リージョン',
+      'us': 'US マルチリージョン',
+      'eu': 'EU マルチリージョン',
+    },
+    azure: {
+      'New Zealand North': 'ニュージーランド北',
+      'Korea Central': '韓国中部',
+      'Korea South': '韓国南部',
+      'Japan East': '東日本',
+      'Japan West': '西日本',
+      'Australia East': 'オーストラリア東部',
+      'Australia Southeast': 'オーストラリア南東部',
+      'Denmark East': 'デンマーク東部',
+      'Denmark West': 'デンマーク西部',
+      'East US': '米国東部',
+      'East US 2': '米国東部 2',
+      'West US': '米国西部',
+      'West US 2': '米国西部 2',
+      'West US 3': '米国西部 3',
+      'North Europe': '北ヨーロッパ',
+      'West Europe': '西ヨーロッパ',
+    }
+  }
 };
 
 const VENDOR_REGION_GUIDE = {
@@ -475,7 +582,9 @@ async function fetchRSS(env) {
       const isNew = insertRes.meta.changes > 0;
       if (isNew) {
         totalNew++;
-        jobs.push({ articleId: selectRes.id, lang: DEFAULT_QUEUE_LANG, reason: 'new' });
+        jobs.push({ articleId: selectRes.id, lang: 'ko', reason: 'new' });
+        jobs.push({ articleId: selectRes.id, lang: 'en', reason: 'new' });
+        jobs.push({ articleId: selectRes.id, lang: 'ja', reason: 'new' });
       }
       localizedInsertStatements.push(
         env.DB.prepare(
@@ -533,34 +642,44 @@ function normalizeShortList(value, maxItems = 3) {
     .slice(0, maxItems);
 }
 
-function mapRegionDisplayName(value, csp) {
+function mapRegionDisplayName(value, csp, lang) {
   const text = String(value || '').trim();
   if (!text) return '';
-  const vendorMap = REGION_DISPLAY_MAP[csp] || {};
+  const langMap = REGION_DISPLAY_MAP[lang] || {};
+  const vendorMap = langMap[csp] || {};
   return vendorMap[text] || text;
 }
 
-function normalizeRegionsField(value, csp) {
-  const items = normalizeShortList(value, 10).map(item => mapRegionDisplayName(item, csp));
+function normalizeRegionsField(value, csp, lang) {
+  const items = normalizeShortList(value, 10).map(item => mapRegionDisplayName(item, csp, lang));
   const joined = items.join(', ').trim();
   const lower = joined.toLowerCase();
 
-  if (!joined || lower === 'all' || lower === 'global' || joined === '모든 리전') {
-    if (csp === 'aws') return '모든 AWS 리전';
-    if (csp === 'azure') return '모든 Azure 퍼블릭 리전';
-    return '모든 리전';
+  const isKo = lang === 'ko';
+  const isJa = lang === 'ja';
+
+  if (!joined || lower === 'all' || lower === 'global' || joined === '모든 리전' || joined === 'すべてのリージョン') {
+    if (csp === 'aws') return isKo ? '모든 AWS 리전' : isJa ? 'すべてのAWSリージョン' : 'All AWS Regions';
+    if (csp === 'azure') return isKo ? '모든 Azure 퍼블릭 리전' : isJa ? 'すべてのAzureパブリックリージョン' : 'All public Azure regions';
+    return isKo ? '모든 리전' : isJa ? 'すべてのリージョン' : 'All regions';
   }
 
-  if (/all aws regions|where .*aws/i.test(joined)) return '모든 AWS 리전';
-  if (/all public azure regions|all azure regions/i.test(joined)) return '모든 Azure 퍼블릭 리전';
+  if (/all aws regions|where .*aws/i.test(joined)) {
+    return isKo ? '모든 AWS 리전' : isJa ? 'すべてのAWSリージョン' : 'All AWS Regions';
+  }
+  if (/all public azure regions|all azure regions/i.test(joined)) {
+    return isKo ? '모든 Azure 퍼블릭 리전' : isJa ? 'すべてのAzureパブリックリージョン' : 'All public Azure regions';
+  }
   if (/all regions/i.test(joined)) {
-    if (csp === 'aws') return '모든 AWS 리전';
-    if (csp === 'azure') return '모든 Azure 퍼블릭 리전';
-    return '모든 리전';
+    if (csp === 'aws') return isKo ? '모든 AWS 리전' : isJa ? 'すべてのAWSリージョン' : 'All AWS Regions';
+    if (csp === 'azure') return isKo ? '모든 Azure 퍼블릭 리전' : isJa ? 'すべてのAzureパブリックリージョン' : 'All public Azure regions';
+    return isKo ? '모든 리전' : isJa ? 'すべてのリージョン' : 'All regions';
   }
 
   return joined
-    .replace(/\bAPNZ\b/g, csp === 'aws' ? '아시아 태평양(뉴질랜드) 리전' : '뉴질랜드 리전')
+    .replace(/\bAPNZ\b/g, csp === 'aws'
+      ? (isKo ? '아시아 태평양(뉴질랜드) 리전' : isJa ? 'アジア太平洋 (ニュージーランド) リージョン' : 'Asia Pacific (New Zealand)')
+      : (isKo ? '뉴질랜드 리전' : isJa ? 'ニュージーランド リージョン' : 'New Zealand North'))
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -663,9 +782,10 @@ function hasDanglingTitleFragment(title) {
 
 
 // Deterministic post-processing: fix common LLM issues without another AI call
-function applyDeterministicFixes(record, row) {
+function applyDeterministicFixes(record, row, lang) {
   let { title, summary, target, features, regions, status } = record;
   const entities = extractEntities(row.title_en, (row.description_en || '').slice(0, 800));
+  const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
 
   // Fix 1: Strip markdown artifacts
   const stripMd = (s) => s.replace(/[*#`_~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
@@ -675,14 +795,15 @@ function applyDeterministicFixes(record, row) {
   // Fix 1b: Strip status tags from title
   title = title.replace(/\s*\[?\b(?:Public Preview|Generally Available|Retirement|In preview|Launched|GA|Preview)\b\]?\s*[:：]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
 
-  // Fix 1c: Strip CJK characters (Chinese/Japanese) from title and summary
-  const stripCJK = (s) => s.replace(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g, '').replace(/\s+/g, ' ').trim();
-  title = stripCJK(title);
-  summary = stripCJK(summary);
+  // Fix 1c: Strip CJK characters (Chinese/Japanese) from title and summary — ONLY if not ja!
+  if (lang !== 'ja') {
+    const stripCJK = (s) => s.replace(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/g, '').replace(/\s+/g, ' ').trim();
+    title = stripCJK(title);
+    summary = stripCJK(summary);
+  }
 
   // Fix 2: Entity preservation check — if product name truncated, use original
   for (const product of entities.products) {
-    // Check if product name appears truncated in title
     const words = product.split(/\s+/);
     if (words.length >= 2) {
       const partial = words.slice(0, -1).join(' ');
@@ -692,29 +813,28 @@ function applyDeterministicFixes(record, row) {
     }
   }
 
-  // Fix 3: Summary repeats title — remove first sentence if it's too similar
-  const titleNorm = title.replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+  // Fix 3: Summary repeats title
+  const titleNorm = title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   const summaryFirst = summary.split(/[.。!]/)[0] || '';
-  const summaryFirstNorm = summaryFirst.replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+  const summaryFirstNorm = summaryFirst.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   if (titleNorm && summaryFirstNorm && titleNorm.length > 10) {
-    // Jaccard similarity on character bigrams
     const bigrams = (s) => { const b = new Set(); for (let i = 0; i < s.length - 1; i++) b.add(s.slice(i, i+2)); return b; };
     const tb = bigrams(titleNorm), sb = bigrams(summaryFirstNorm);
     const intersection = [...tb].filter(x => sb.has(x)).length;
     const union = new Set([...tb, ...sb]).size;
     if (union > 0 && intersection / union > 0.6) {
-      // Remove first sentence from summary
       const rest = summary.slice(summaryFirst.length).replace(/^[.。!\s]+/, '').trim();
       if (rest.length > 20) summary = rest;
     }
   }
 
-  // Fix 4: Features — strip product-name-only items
-  const featList = features.split(',').map(f => f.trim()).filter(f => {
-    // Keep if it contains a Korean verb/action word or is longer than just a product name
-    return f.length > 5 && !/^[A-Z][A-Za-z0-9\s\.\-]+$/.test(f);
-  });
-  if (featList.length >= 2) features = featList.slice(0, 3).join(', ');
+  // Fix 4: Features — strip product-name-only items (only for non-English translations)
+  if (lang !== 'en') {
+    const featList = features.split(',').map(f => f.trim()).filter(f => {
+      return f.length > 5 && !/^[A-Z][A-Za-z0-9\s\.\-]+$/.test(f);
+    });
+    if (featList.length >= 2) features = featList.slice(0, 3).join(', ');
+  }
 
   // Fix 5: Status validation and corrections
   let parsedStatus = [];
@@ -727,23 +847,22 @@ function applyDeterministicFixes(record, row) {
     parsedStatus = [String(parsedStatus)];
   }
 
-  const ALLOWED_STATUSES = ['정식 출시', '미리보기', '베타', '지원 종료'];
+  const ALLOWED_STATUSES = profile.statuses;
   let validatedStatus = [];
   for (const s of parsedStatus) {
     const str = String(s).trim();
     if (ALLOWED_STATUSES.includes(str)) {
       validatedStatus.push(str);
     } else {
-      // Try to extract standard status from raw LLM sentence/text
       const lower = str.toLowerCase();
-      if (lower.includes('지원 종료') || lower.includes('종료') || lower.includes('퇴역') || lower.includes('retire') || lower.includes('deprecate') || lower.includes('retirement')) {
-        validatedStatus.push('지원 종료');
-      } else if (lower.includes('미리보기') || lower.includes('preview')) {
-        validatedStatus.push('미리보기');
-      } else if (lower.includes('베타') || lower.includes('beta')) {
-        validatedStatus.push('베타');
-      } else if (lower.includes('정식 출시') || lower.includes('ga') || lower.includes('launch') || lower.includes('released')) {
-        validatedStatus.push('정식 출시');
+      if (lower.includes('지원 종료') || lower.includes('종료') || lower.includes('퇴역') || lower.includes('retire') || lower.includes('deprecate') || lower.includes('retirement') || lower.includes('サポート終了') || lower.includes('終了')) {
+        validatedStatus.push(profile.statusMap.retire);
+      } else if (lower.includes('미리보기') || lower.includes('preview') || lower.includes('プレビュー')) {
+        validatedStatus.push(profile.statusMap.preview);
+      } else if (lower.includes('베타') || lower.includes('beta') || lower.includes('ベータ')) {
+        validatedStatus.push(profile.statusMap.beta);
+      } else if (lower.includes('정식 출시') || lower.includes('ga') || lower.includes('launch') || lower.includes('released') || lower.includes('一般提供') || lower.includes('提供開始')) {
+        validatedStatus.push(profile.statusMap.ga);
       }
     }
   }
@@ -752,55 +871,75 @@ function applyDeterministicFixes(record, row) {
   const descLower = String(row.description_en || '').toLowerCase();
   const titleLower = String(row.title_en || '').toLowerCase();
 
-  // Strip "베타" if there is no beta keyword in the original title or description
-  if (parsedStatus.includes('베타')) {
-    const hasBetaEvidence = descLower.includes('beta') || descLower.includes('베타') || titleLower.includes('beta') || titleLower.includes('베타');
+  // Strip beta if there is no beta keyword
+  const betaKeyword = profile.statusMap.beta;
+  if (parsedStatus.includes(betaKeyword)) {
+    const hasBetaEvidence = descLower.includes('beta') || descLower.includes('베타') || descLower.includes('ベータ') || titleLower.includes('beta') || titleLower.includes('베타') || titleLower.includes('ベータ');
     if (!hasBetaEvidence) {
-      parsedStatus = parsedStatus.filter(s => s !== '베타');
+      parsedStatus = parsedStatus.filter(s => s !== betaKeyword);
     }
   }
 
-  // Strip "미리보기" if there is no preview keyword in the original title or description
-  if (parsedStatus.includes('미리보기')) {
-    const hasPreviewEvidence = descLower.includes('preview') || descLower.includes('미리보기') || titleLower.includes('preview') || titleLower.includes('미리보기');
+  // Strip preview if there is no preview keyword
+  const previewKeyword = profile.statusMap.preview;
+  if (parsedStatus.includes(previewKeyword)) {
+    const hasPreviewEvidence = descLower.includes('preview') || descLower.includes('미리보기') || descLower.includes('プレビュー') || titleLower.includes('preview') || titleLower.includes('미리보기') || titleLower.includes('プレビュー');
     if (!hasPreviewEvidence) {
-      parsedStatus = parsedStatus.filter(s => s !== '미리보기');
+      parsedStatus = parsedStatus.filter(s => s !== previewKeyword);
     }
   }
 
-  // If status list is empty, default to "정식 출시"
+  // If status list is empty, default to GA
   if (parsedStatus.length === 0) {
-    parsedStatus = ['정식 출시'];
+    parsedStatus = [profile.statuses[0]];
   }
   status = JSON.stringify(parsedStatus);
 
   return { title, summary, target, features, regions, status };
 }
 
-function assessTranslationQuality(record, row) {
+function assessTranslationQuality(record, row, lang) {
   const reasons = [];
   const title = String(record.title || '').trim();
   const summary = String(record.summary || '').trim();
   const target = String(record.target || '').trim();
   const features = normalizeShortList(record.features);
+  const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
 
   if (!title || !summary) reasons.push('missing-core-fields');
-  if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(title + summary)) reasons.push('cjk-contamination');
+  
+  // Flag CJK characters only if target language is NOT Japanese
+  if (lang !== 'ja' && /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(title + summary)) {
+    reasons.push('cjk-contamination');
+  }
+  
   if (hasDanglingTitleFragment(title)) reasons.push('title-truncated');
-  if (title.length > 60) reasons.push('title-too-long');
+  if (title.length > 80) reasons.push('title-too-long');
   if (hasMarkdownArtifacts(title) || hasMarkdownArtifacts(summary)) reasons.push('markdown-artifact');
-  if (title === row.title_en) reasons.push('title-not-translated');
+  
+  // Flag untranslated titles only if target language is NOT English
+  if (lang !== 'en' && title === row.title_en) {
+    reasons.push('title-not-translated');
+  }
+  
   if (summary.length < 30) reasons.push('summary-too-short');
   if (countSentences(summary) !== 2) reasons.push('summary-not-two-sentences');
   if (summary.slice(0, 24) === title.slice(0, 24)) reasons.push('summary-repeats-title');
   if (!target || target === 'all') reasons.push('target-too-generic');
   if (features.length < 2) reasons.push('features-too-thin');
 
-  // Status validation: 베타/미리보기 must have evidence in description
+  // Status validation: beta/preview must have evidence in description
   const statusStr = JSON.stringify(record.status || '').toLowerCase();
   const descLower = String(row.description_en || '').toLowerCase();
-  if ((statusStr.includes('베타') || statusStr.includes('beta')) && !descLower.includes('beta') && !descLower.includes('베타')) reasons.push('status-beta-no-evidence');
-  if ((statusStr.includes('미리보기') || statusStr.includes('preview')) && !descLower.includes('preview') && !descLower.includes('미리보기') && !row.title_en.toLowerCase().includes('preview')) reasons.push('status-preview-no-evidence');
+  const betaKeyword = profile.statusMap.beta.toLowerCase();
+  const previewKeyword = profile.statusMap.preview.toLowerCase();
+
+  if (statusStr.includes(betaKeyword) && !descLower.includes('beta') && !descLower.includes('베타') && !descLower.includes('ベータ')) {
+    reasons.push('status-beta-no-evidence');
+  }
+  if (statusStr.includes(previewKeyword) && !descLower.includes('preview') && !descLower.includes('미리보기') && !descLower.includes('プレビュー') && !row.title_en.toLowerCase().includes('preview')) {
+    reasons.push('status-preview-no-evidence');
+  }
 
   return {
     pass: reasons.length === 0,
@@ -815,7 +954,7 @@ function applyQualitySuggestions(record, review) {
 
   if (suggestedTitle) {
     next.title = suggestedTitle
-      .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
+      .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -826,29 +965,48 @@ function applyQualitySuggestions(record, review) {
   return next;
 }
 
-async function reviewTranslationQualityWithAI(env, row, record, hint = '') {
+async function reviewTranslationQualityWithAI(env, row, record, lang, hint = '') {
   const reviewInput = JSON.stringify({
     original_title: row.title_en,
     original_description: String(row.description_en || '').slice(0, 1500),
     region_guidance: buildVendorPromptHints(row),
     translated: { title: record.title, summary: record.summary, target: record.target, features: record.features, regions: record.regions, status: record.status },
   });
-  const reviewPrompt = hint ? `${REVIEW_PROMPT}\n\n=== 추가 지시 ===\n${hint}` : REVIEW_PROMPT;
+  
+  const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
+  const sysRules = getTranslationPrompt(lang).rules;
+  
+  const reviewPrompt = `You review ${profile.name} cloud news cards. Your job is to find exactly 3 errors or issues in the translation/summary. Compare the translated/summarized fields against the original English and check these rules:
+
+${sysRules}
+
+Find and fix these specific problems:
+1. ${lang === 'ja' ? 'Garbled characters' : 'Chinese characters (漢字), Japanese kana, or any non-target language characters'}
+2. Hallucinated content not in the original English
+3. Garbled, truncated, or unnaturally translated text
+4. Status field contradicting the description context
+5. Title that is too vague, incomplete, or mirrors the English too closely
+
+OUTPUT JSON with corrected fields only. Omit fields that are correct.
+{"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
+If you cannot find any real errors after thorough review, output: {"pass":true}`;
+
+  const reviewPromptWithHint = hint ? `${reviewPrompt}\n\n=== 추가 지시 ===\n${hint}` : reviewPrompt;
   try {
     const aiResp = await env.AI.run(REVIEW_MODEL, {
-      messages: [{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }],
+      messages: [{ role: 'system', content: reviewPromptWithHint }, { role: 'user', content: reviewInput }],
       max_tokens: 384, temperature: 0.1,
     });
     const parsed = parseAIResponse(aiResp);
     if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
     const fixed = { ...record };
-    if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
     if (parsed.status) {
       let s = parsed.status;
       if (typeof s === 'string') try { s = JSON.parse(s); } catch {}
       fixed.status = JSON.stringify(Array.isArray(s) ? s : [s]);
     }
-    if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp);
+    if (parsed.regions) fixed.regions = typeof parsed.regions === 'string' ? parsed.regions : normalizeRegionsField(parsed.regions, row.csp, lang);
     if (parsed.target) fixed.target = parsed.target;
     if (parsed.features) fixed.features = normalizeShortList(parsed.features).join(', ');
     return { pass: true, reasons: ['reviewer-applied-edit'], record: fixed };
@@ -975,31 +1133,36 @@ function getTranslationExecutionOptions(reason = 'backlog') {
   };
 }
 
-async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL) {
+async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY_MODEL) {
   const titleForLLM = row.title_en.length < 20
     ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
     : row.title_en;
   const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
-  const sysPrompt = hint ? `${SYSTEM_PROMPT}\n\n=== 용어 사전 ===\n${hint}` : SYSTEM_PROMPT;
+  
+  const { sysPrompt, profile } = getTranslationPrompt(lang);
+  const sysPromptWithHint = hint ? `${sysPrompt}\n\n=== 용어 사전 ===\n${hint}` : sysPrompt;
+  const fewShot = lang === 'en' ? FEW_SHOT_EN : lang === 'ja' ? FEW_SHOT_JA : FEW_SHOT_KO;
+
   const aiResp = await env.AI.run(model, {
-    messages: [{ role: 'system', content: sysPrompt }, ...FEW_SHOT, { role: 'user', content: userMsg }],
+    messages: [{ role: 'system', content: sysPromptWithHint }, ...fewShot, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
     max_tokens: 2048, temperature: 0.1,
   });
   const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return null;
   let cleanTitle = parsed.title
-    .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시)[\]\)]\s*/gi, ' ')
+    .replace(/\s*[\[\(](?:Launched|Preview|Retired|In development|Generally Available|정식 출시|미리보기|베타|지원 종료|GA|출시|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   const feat = normalizeShortList(parsed.features).join(', ');
-  const reg = normalizeRegionsField(parsed.regions, row.csp);
-  const VALID_STATUS = ['정식 출시', '미리보기', '베타', '지원 종료'];
+  const reg = normalizeRegionsField(parsed.regions, row.csp, lang);
+  
+  const VALID_STATUS = profile.statuses;
   const rawStatus = Array.isArray(parsed.status) ? parsed.status : [parsed.status || ''];
   const cleanStatus = [...new Set(rawStatus.flatMap(s => {
     for (const v of VALID_STATUS) { if (s.includes(v)) return [v]; }
     return [];
   }))];
-  const stat = JSON.stringify(cleanStatus.length ? cleanStatus : ['정식 출시']);
+  const stat = JSON.stringify(cleanStatus.length ? cleanStatus : [VALID_STATUS[0]]);
   const record = {
     title: cleanTitle,
     summary: parsed.summary || '',
@@ -1011,54 +1174,53 @@ async function buildTranslationRecord(env, row, hint = '', model = PRIMARY_MODEL
   return record;
 }
 
-async function validateTranslationRecord(env, row, record, options = {}) {
+async function validateTranslationRecord(env, row, record, lang, options = {}) {
   const allowLowQuality = !!options.allowLowQuality;
-  // Apply deterministic post-processing fixes
-  const fixed = applyDeterministicFixes(record, row);
-  const quality = assessTranslationQuality(fixed, row);
+  const fixed = applyDeterministicFixes(record, row, lang);
+  const quality = assessTranslationQuality(fixed, row, lang);
   if (!quality.pass && !allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: fixed };
   }
   return { ok: true, quality, record: fixed };
 }
 
-async function persistTranslationRecord(env, row, record, modelUsed, { isReview = false } = {}) {
+async function persistTranslationRecord(env, row, record, lang, modelUsed, { isReview = false } = {}) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   await env.DB.prepare(
     'INSERT OR REPLACE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, target, features, regions, status, model_used, translated_at, reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-  ).bind(row.id, row.csp, 'ko', row.url, row.pub_date, record.title, record.summary,
+  ).bind(row.id, row.csp, lang, row.url, row.pub_date, record.title, record.summary,
          record.target, record.features, record.regions, record.status, modelUsed,
          now, isReview ? now : null).run();
 }
 
-async function runReviewPipeline(env, row, hint = '') {
+async function runReviewPipeline(env, row, lang, hint = '') {
   const existing = await env.DB.prepare(
     'SELECT title, summary, target, features, regions, status FROM localized_content WHERE article_id = ? AND lang = ?'
-  ).bind(row.id, 'ko').first();
+  ).bind(row.id, lang).first();
   if (!existing) return { ok: false };
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
-  const reviewed = await reviewTranslationQualityWithAI(env, row, record, hint);
+  const reviewed = await reviewTranslationQualityWithAI(env, row, record, lang, hint);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
-  await persistTranslationRecord(env, row, finalRecord, REVIEW_MODEL, { isReview: true });
+  await persistTranslationRecord(env, row, finalRecord, lang, REVIEW_MODEL, { isReview: true });
   return { ok: true };
 }
 
-async function runTranslationPipeline(env, row, reason = 'backlog', hint = '') {
+async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint = '') {
   const options = getTranslationExecutionOptions(reason);
-  const record = await buildTranslationRecord(env, row, hint, options.model);
+  const record = await buildTranslationRecord(env, row, lang, hint, options.model);
   if (!record) {
     return { ok: false, needsRetry: false };
   }
   // Deterministic fixes
-  const fixed = applyDeterministicFixes(record, row);
+  const fixed = applyDeterministicFixes(record, row, lang);
   // AI review with different model — checks title, status, regions
-  const reviewed = await reviewTranslationQualityWithAI(env, row, fixed, hint);
+  const reviewed = await reviewTranslationQualityWithAI(env, row, fixed, lang, hint);
   // Final quality gate
-  const quality = assessTranslationQuality(reviewed.record, row);
+  const quality = assessTranslationQuality(reviewed.record, row, lang);
   if (!quality.pass && !options.allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
-  await persistTranslationRecord(env, row, reviewed.record, REVIEW_MODEL, { isReview: true });
+  await persistTranslationRecord(env, row, reviewed.record, lang, REVIEW_MODEL, { isReview: true });
   return { ok: true, quality };
 }
 
@@ -1104,15 +1266,20 @@ export default {
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const minute = new Date().getMinutes();
 
-    // Every minute: queue backlog translations
-    const queued = await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
+    // Every minute: queue backlog translations for all languages
+    let queued = 0;
+    for (const lang of ['ko', 'en', 'ja']) {
+      queued += await enqueueMissingTranslations(env, lang, backlogQueueBatchSize);
+    }
 
     // Every 5 min: if no backlog, queue pending reviews
     if (minute % 5 === 0 && queued === 0) {
-      const pending = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY lc.created_at DESC LIMIT 10').bind('ko').all();
-      if (pending.results.length > 0) {
-        const jobs = pending.results.map(r => ({ articleId: r.id, lang: 'ko', action: 'review' }));
-        await enqueueTranslationJobs(env, jobs, { skipClaim: true });
+      for (const lang of ['ko', 'en', 'ja']) {
+        const pending = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY lc.created_at DESC LIMIT 10').bind(lang).all();
+        if (pending.results.length > 0) {
+          const jobs = pending.results.map(r => ({ articleId: r.id, lang, action: 'review' }));
+          await enqueueTranslationJobs(env, jobs, { skipClaim: true });
+        }
       }
     }
 
@@ -1136,9 +1303,15 @@ export default {
           body: JSON.stringify({ content: `⚠️ What's New: ${staleCount.c}건의 번역 작업이 30분 이상 정체 중. DLQ 확인 필요.` }),
         }).catch(() => {});
       }
-      const backlog = await getMissingTranslationCount(env, 'ko');
-      if (backlog > 0) await enqueueMissingTranslations(env, 'ko', backlogQueueBatchSize);
-      console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for ko`);
+      
+      let backlog = 0;
+      for (const lang of ['ko', 'en', 'ja']) {
+        const bl = await getMissingTranslationCount(env, lang);
+        if (bl > 0) await enqueueMissingTranslations(env, lang, backlogQueueBatchSize);
+        backlog += bl;
+      }
+      
+      console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for translation`);
       // Alert on consecutive empty fetches
       if (webhookUrl && n.newArticles === 0) {
         const prev = await env.DB.prepare("SELECT count(*) as c FROM articles WHERE created_at > datetime('now', '-3 hours')").first();
@@ -1171,7 +1344,7 @@ export default {
         if (!row) { msg.ack(); continue; }
 
         if (action === 'review') {
-          await runReviewPipeline(env, row, hint);
+          await runReviewPipeline(env, row, lang, hint);
           msg.ack();
           continue;
         }
@@ -1183,7 +1356,7 @@ export default {
           continue;
         }
 
-        const result = await runTranslationPipeline(env, row, reason, hint);
+        const result = await runTranslationPipeline(env, row, lang, reason, hint);
         if (result?.ok) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
@@ -1192,12 +1365,14 @@ export default {
 
         if (result?.needsRetry && reason !== 'quality_retry') {
           const qualityHint = (result.reasons || []).map(r => {
-            if (r === 'summary-repeats-title') return '요약 첫 문장이 제목과 달라야 함';
-            if (r === 'title-not-translated') return '제목을 한국어로 번역해야 함';
-            if (r === 'title-truncated') return '제목이 잘리지 않게 완성해야 함';
-            if (r === 'markdown-artifact') return '마크다운(** ` 등) 제거';
-            if (r === 'summary-not-two-sentences') return '요약은 정확히 2문장';
-            if (r === 'target-too-generic') return '대상을 구체적으로 작성';
+            const isKo = lang === 'ko';
+            const isJa = lang === 'ja';
+            if (r === 'summary-repeats-title') return isKo ? '요약 첫 문장이 제목과 달라야 함' : isJa ? '要約の最初の文がタイトルと異なる必要があります' : 'Summary first sentence must differ from title';
+            if (r === 'title-not-translated') return isKo ? '제목을 한국어로 번역해야 함' : isJa ? 'タイトルを日本語に翻訳する必要があります' : 'Title must be translated';
+            if (r === 'title-truncated') return isKo ? '제목이 잘리지 않게 완성해야 함' : isJa ? 'タイトルが途切れないように完成させてください' : 'Title must be completed without truncation';
+            if (r === 'markdown-artifact') return isKo ? '마크다운 제거' : isJa ? 'マークダウン削除' : 'Remove markdown formatting';
+            if (r === 'summary-not-two-sentences') return isKo ? '요약은 정확히 2문장' : isJa ? '要約は正確に2文' : 'Summary must be exactly 2 sentences';
+            if (r === 'target-too-generic') return isKo ? '대상을 구체적으로 작성' : isJa ? '対象を具体的に記述してください' : 'Target must be specific';
             return r;
           }).join('. ');
           await touchTranslationJob(env, articleId, lang, 'quality_retry');
@@ -1208,7 +1383,7 @@ export default {
 
         msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts || 0) });
       } catch (e) {
-        console.error(`queue translate error for article ${articleId}:`, e.message);
+        console.error(`queue translate error for article ${articleId} [${lang}]:`, e.message);
         msg.retry({ delaySeconds: calculateRetryDelay(msg.attempts || 0) });
       }
     }
