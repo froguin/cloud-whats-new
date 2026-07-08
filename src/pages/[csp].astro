@@ -213,6 +213,11 @@ const structuredData = [
     :global([data-theme="dark"]) .filter-btn.is-active[data-filter="베타"]       { background:#581c87; color:#f3e8ff; border-color:#c084fc; box-shadow:0 0 0 2px #c084fc; }
     :global([data-theme="dark"]) .filter-btn.is-active[data-filter="지원 종료"]  { background:#7f1d1d; color:#fee2e2; border-color:#f87171; box-shadow:0 0 0 2px #f87171; }
     :global([data-theme="dark"]) .filter-btn.is-active[data-filter="번역 준비중"]{ background:#78350f; color:#fef3c7; border-color:#fbbf24; box-shadow:0 0 0 2px #fbbf24; }
+
+    #search:focus {
+      border-color: var(--color-primary) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent), inset 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
   </style>
 </Layout>
 

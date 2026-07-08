@@ -413,35 +413,74 @@ function parseRSS(xml, csp) {
 async function fetchRSS(env) {
   let totalNew = 0;
   const jobs = [];
-  for (const [csp, url] of Object.entries(RSS_FEEDS)) {
-    try {
-      const resp = await fetch(url, { headers: { 'User-Agent': 'CloudWhatsNew/2.0' }, redirect: 'follow' });
-      if (!resp.ok) continue;
-      const xml = await resp.text();
-      if (!xml.includes('<')) continue;
-      const items = parseRSS(xml, csp).slice(0, 100);
-      for (const item of items) {
-        if (!item.url && !item.title) continue;
-        // Insert into articles (source of truth)
-        const r = await env.DB.prepare(
-          'INSERT OR IGNORE INTO articles (csp, url, title_en, description_en, pub_date) VALUES (?,?,?,?,?)'
-        ).bind(csp, item.url || '', item.title, item.description, item.pub_date).run();
-        if (r.meta.changes > 0) totalNew++;
-        // Always ensure English localized_content exists
-        const row = await env.DB.prepare('SELECT id FROM articles WHERE csp=? AND url=? AND title_en=?').bind(csp, item.url || '', item.title).first();
-        if (row) {
-          if (r.meta.changes > 0) {
-            jobs.push({ articleId: row.id, lang: DEFAULT_QUEUE_LANG, reason: 'new' });
-          }
-          await env.DB.prepare(
-            'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
-          ).bind(row.id, csp, 'en', item.url || '', item.pub_date, item.title, item.description, '').run();
-        }
-      }
-    } catch (e) {
-      console.error(`${csp} fetch error:`, e.message);
+
+  const feedPromises = Object.entries(RSS_FEEDS).map(async ([csp, url]) => {
+    const resp = await fetch(url, { headers: { 'User-Agent': 'CloudWhatsNew/2.0' }, redirect: 'follow' });
+    if (!resp.ok) throw new Error(`HTTP status ${resp.status}`);
+    const xml = await resp.text();
+    if (!xml.includes('<')) throw new Error('Invalid XML');
+    const items = parseRSS(xml, csp).slice(0, 100);
+    return { csp, items };
+  });
+
+  const feedResults = await Promise.allSettled(feedPromises);
+  const allItems = [];
+
+  for (let i = 0; i < feedResults.length; i++) {
+    const res = feedResults[i];
+    const csp = Object.keys(RSS_FEEDS)[i];
+    if (res.status === 'fulfilled') {
+      allItems.push(...res.value.items);
+    } else {
+      console.error(`${csp} fetch error:`, res.reason?.message || res.reason);
     }
   }
+
+  const validItems = allItems.filter(item => item.url || item.title);
+  if (validItems.length === 0) {
+    return { newArticles: 0, queued: 0 };
+  }
+
+  const insertStatements = validItems.map(item =>
+    env.DB.prepare(
+      'INSERT OR IGNORE INTO articles (csp, url, title_en, description_en, pub_date) VALUES (?,?,?,?,?)'
+    ).bind(item.csp, item.url || '', item.title, item.description || '', item.pub_date)
+  );
+  
+  const insertResults = await env.DB.batch(insertStatements);
+
+  const selectStatements = validItems.map(item =>
+    env.DB.prepare('SELECT id FROM articles WHERE csp=? AND url=? AND title_en=?')
+      .bind(item.csp, item.url || '', item.title)
+  );
+
+  const selectResults = await env.DB.batch(selectStatements);
+
+  const localizedInsertStatements = [];
+  
+  for (let i = 0; i < validItems.length; i++) {
+    const item = validItems[i];
+    const insertRes = insertResults[i];
+    const selectRes = selectResults[i].results[0];
+
+    if (selectRes) {
+      const isNew = insertRes.meta.changes > 0;
+      if (isNew) {
+        totalNew++;
+        jobs.push({ articleId: selectRes.id, lang: DEFAULT_QUEUE_LANG, reason: 'new' });
+      }
+      localizedInsertStatements.push(
+        env.DB.prepare(
+          'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
+        ).bind(selectRes.id, item.csp, 'en', item.url || '', item.pub_date, item.title, item.description || '', '')
+      );
+    }
+  }
+
+  if (localizedInsertStatements.length > 0) {
+    await env.DB.batch(localizedInsertStatements);
+  }
+
   const queued = await enqueueTranslationJobs(env, jobs);
   if (jobs.length > 0 && queued === 0) {
     console.error(`Failed to enqueue ${jobs.length} translation jobs`);
@@ -773,18 +812,21 @@ async function ensureTranslationJobStateTable(env) {
 
 async function claimTranslationJobs(env, jobs) {
   await ensureTranslationJobStateTable(env);
-  const claimed = [];
-  for (const job of jobs) {
-    const alreadyLocalized = await hasLocalizedContent(env, job.articleId, job.lang);
-    if (alreadyLocalized) continue;
-
-    const result = await env.DB.prepare(`
+  if (jobs.length === 0) return [];
+  const statements = jobs.map((job) =>
+    env.DB.prepare(`
       INSERT OR IGNORE INTO translation_job_state (article_id, lang, reason, updated_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `).bind(job.articleId, job.lang, job.reason || 'backlog').run();
-
-    if (result.meta.changes > 0) {
-      claimed.push(job);
+      SELECT ?, ?, ?, datetime('now')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM localized_content WHERE article_id = ? AND lang = ?
+      )
+    `).bind(job.articleId, job.lang, job.reason || 'backlog', job.articleId, job.lang)
+  );
+  const results = await env.DB.batch(statements);
+  const claimed = [];
+  for (let i = 0; i < jobs.length; i++) {
+    if (results[i].meta.changes > 0) {
+      claimed.push(jobs[i]);
     }
   }
   return claimed;
@@ -792,12 +834,14 @@ async function claimTranslationJobs(env, jobs) {
 
 async function releaseTranslationJobs(env, jobs) {
   await ensureTranslationJobStateTable(env);
-  for (const job of jobs) {
-    await env.DB.prepare(`
+  if (jobs.length === 0) return;
+  const statements = jobs.map((job) =>
+    env.DB.prepare(`
       DELETE FROM translation_job_state
       WHERE article_id = ? AND lang = ?
-    `).bind(job.articleId, job.lang).run();
-  }
+    `).bind(job.articleId, job.lang)
+  );
+  await env.DB.batch(statements);
 }
 
 async function touchTranslationJob(env, articleId, lang, reason) {
@@ -1232,10 +1276,12 @@ export default {
           JOIN articles a ON lc.article_id = a.id
           WHERE ${buildBadQualityFilter()} LIMIT 25
         `).all();
-        const retryIds = [];
-        for (const row of bad.results) {
-          await env.DB.prepare("DELETE FROM localized_content WHERE article_id = ? AND lang = 'ko'").bind(row.id).run();
-          retryIds.push(row.id);
+        const retryIds = bad.results.map(row => row.id);
+        if (retryIds.length > 0) {
+          const placeholders = retryIds.map(() => '?').join(',');
+          await env.DB.prepare(`DELETE FROM localized_content WHERE lang = 'ko' AND article_id IN (${placeholders})`)
+            .bind(...retryIds)
+            .run();
         }
         const retried = await enqueueArticleTranslations(env, retryIds, 'ko', 'quality_retry');
         return jsonResponse({ found: bad.results.length, retried }, {}, headers);
