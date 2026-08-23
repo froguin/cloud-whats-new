@@ -8,7 +8,8 @@ const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v1';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
-const FLUENT_REFRESH_BATCH_SIZE = 6;
+const FLUENT_REFRESH_BATCH_SIZE = 4;
+const FLUENT_REFRESH_DAILY_CAP = 100;
 
 // Adapted from https://github.com/snflkd/fluent-korean (fluent-korean-not-coding).
 // The upstream README asks not to summarize these clauses: examples carry the intended behavior.
@@ -1424,7 +1425,40 @@ async function getFluentRefreshRemaining(env) {
   return row?.count || 0;
 }
 
+async function getFluentRefreshTodayCount(env) {
+  const row = await env.DB.prepare(`
+    SELECT count(*) as count
+    FROM localized_content
+    WHERE lang = 'ko' AND model_used = ?
+      AND date(translated_at) = date('now')
+  `).bind(FLUENT_KOREAN_MODEL_TAG).first();
+  return row?.count || 0;
+}
+
+async function getFluentRefreshInFlightCount(env) {
+  const row = await env.DB.prepare(`
+    SELECT count(*) as count
+    FROM translation_job_state
+    WHERE lang = 'ko' AND reason IN ('fluent_refresh', 'quality_retry', 'manual')
+  `).first();
+  return row?.count || 0;
+}
+
+async function getFluentRefreshBudget(env, requested) {
+  const [today, inflight] = await Promise.all([
+    getFluentRefreshTodayCount(env),
+    getFluentRefreshInFlightCount(env),
+  ]);
+  const remaining = Math.max(0, FLUENT_REFRESH_DAILY_CAP - today - inflight);
+  return Math.min(Math.max(0, requested), remaining);
+}
+
 async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE) {
+  const budget = await getFluentRefreshBudget(env, limit);
+  if (budget <= 0) {
+    console.log(`Fluent Korean refresh skipped: daily cap ${FLUENT_REFRESH_DAILY_CAP} reached`);
+    return 0;
+  }
   const rows = await env.DB.prepare(`
     SELECT lc.article_id
     FROM localized_content lc
@@ -1436,7 +1470,7 @@ async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE
       )
     ORDER BY lc.pub_date DESC
     LIMIT ?
-  `).bind(limit).all();
+  `).bind(budget).all();
   const jobs = rows.results.map((row) => ({
     articleId: row.article_id,
     lang: 'ko',
@@ -1740,15 +1774,24 @@ export default {
       if (action === 'refresh-ko') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 50);
         const queued = await enqueueFluentKoreanRefresh(env, limit);
-        const remaining = await getFluentRefreshRemaining(env);
-        return jsonResponse({ queued, remaining, reason: 'fluent_refresh' }, {}, headers);
+        const [remaining, today] = await Promise.all([
+          getFluentRefreshRemaining(env),
+          getFluentRefreshTodayCount(env),
+        ]);
+        return jsonResponse({
+          queued,
+          remaining,
+          today,
+          cap: FLUENT_REFRESH_DAILY_CAP,
+          reason: 'fluent_refresh',
+        }, {}, headers);
       }
 
       return jsonResponse({ error: 'invalid action' }, { status: 400 }, headers);
     }
 
     if (path === '/api/stats') {
-      const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining] = await Promise.all([
+      const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
         env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
@@ -1761,6 +1804,12 @@ export default {
           JOIN articles a ON a.id = lc.article_id
           WHERE ${buildFluentRefreshFilter()}
         `).first(),
+        env.DB.prepare(`
+          SELECT count(*) as count
+          FROM localized_content
+          WHERE lang = 'ko' AND model_used = ?
+            AND date(translated_at) = date('now')
+        `).bind(FLUENT_KOREAN_MODEL_TAG).first(),
       ]);
       return jsonResponse({
         by_lang: byLang.results,
@@ -1768,7 +1817,12 @@ export default {
         backlog: backlog?.count || 0,
         queue: { active: queue.results, stale: staleJobs?.count || 0 },
         review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },
-        fluent_korean: { remaining: fluentRemaining?.count || 0, tag: FLUENT_KOREAN_MODEL_TAG },
+        fluent_korean: {
+          remaining: fluentRemaining?.count || 0,
+          today: fluentToday?.count || 0,
+          cap: FLUENT_REFRESH_DAILY_CAP,
+          tag: FLUENT_KOREAN_MODEL_TAG,
+        },
       }, {}, headers);
     }
 
