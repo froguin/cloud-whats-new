@@ -34,6 +34,26 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Critical above-the-fold CSS: paint header+body immediately -->
+    <style is:inline set:html={`
+      /* Critical above-the-fold: paint header+body immediately */
+      :root {
+        --nav-height: ${vendor === 'azure' ? '48px' : vendor === 'gcp' ? '64px' : '56px'};
+        --color-bg: ${vendor === 'aws' ? '#F2F3F3' : vendor === 'gcp' ? '#F8F9FA' : vendor === 'azure' ? '#FAF9F8' : '#F9FAFB'};
+        --color-text-primary: ${vendor === 'aws' ? '#000716' : vendor === 'gcp' ? '#202124' : vendor === 'azure' ? '#242424' : '#101828'};
+        --nav-bg: ${vendor === 'aws' || vendor === 'home' ? '#232F3E' : vendor === 'gcp' ? '#FFFFFF' : '#FFFFFF'};
+        --color-border: ${vendor === 'aws' ? '#D5DBDB' : vendor === 'gcp' ? 'transparent' : vendor === 'azure' ? '#EDEBE9' : '#E4E7EC'};
+      }
+      [data-theme="dark"] {
+        --color-bg: ${vendor === 'aws' ? '#16191f' : vendor === 'gcp' ? '#202124' : vendor === 'azure' ? '#1B1A19' : '#0F1117'};
+        --color-text-primary: ${vendor === 'aws' ? '#eaeded' : vendor === 'gcp' ? '#E8EAED' : vendor === 'azure' ? '#F3F2F1' : '#F4F4F6'};
+        --nav-bg: ${vendor === 'aws' ? '#16191f' : vendor === 'gcp' ? '#292A2D' : vendor === 'azure' ? '#292827' : '#0F1117'};
+        --color-border: ${vendor === 'aws' ? '#303846' : vendor === 'gcp' ? 'transparent' : vendor === 'azure' ? '#3B3A39' : '#2D3148'};
+      }
+      body { background-color: var(--color-bg); color: var(--color-text-primary); margin: 0; }
+      body.no-transition { transition: none !important; }
+      header { position: sticky; top: 0; z-index: 50; height: var(--nav-height); min-height: var(--nav-height); background-color: var(--nav-bg); border-bottom: 1px solid var(--color-border); }
+    `} />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -115,7 +135,7 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
     </script>
     <ClientRouter />
   </head>
-  <body class="transition-colors duration-200">
+  <body class="no-transition">
     <header>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex justify-between items-center">
         <a href="/" class="text-base sm:text-lg font-bold" style={`color: ${vendor === 'aws' || vendor === 'home' ? '#FFFFFF' : 'var(--color-text-primary)'};`}>
@@ -164,6 +184,7 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
         updateIcons();
 
         toggle.onclick = () => {
+          document.body.style.transition = 'background-color 0.2s, color 0.2s';
           const nextDark = html.getAttribute('data-theme') !== 'dark';
           if (nextDark) html.setAttribute('data-theme', 'dark');
           else html.removeAttribute('data-theme');
@@ -173,6 +194,10 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
       }
 
       document.addEventListener('astro:page-load', initThemeToggle);
+    </script>
+    <script is:inline>
+      // Enable transitions after first paint (double-rAF ensures paint is complete)
+      requestAnimationFrame(function(){requestAnimationFrame(function(){document.body.classList.remove('no-transition')})});
     </script>
   </body>
 </html>

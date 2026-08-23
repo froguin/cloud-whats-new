@@ -151,7 +151,6 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family);
-  transition: background-color 0.2s, color 0.2s;
 }
 
 header {
@@ -159,11 +158,13 @@ header {
   top: 0;
   z-index: 50;
   height: var(--nav-height);
+  min-height: var(--nav-height);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   background-color: color-mix(in srgb, var(--nav-bg) 85%, transparent) !important;
   border-bottom: 1px solid var(--color-border);
   transition: background-color 0.2s, border-color 0.2s;
+  contain: layout style;
 }
 
 /* Nav accent details */
@@ -191,6 +192,7 @@ a:focus-visible, button:focus-visible {
 /* Card hover animation defaults */
 .aws-card, .gcp-card, .azure-card {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
+  contain: layout style;
 }
 
 /* Card press feedback */
