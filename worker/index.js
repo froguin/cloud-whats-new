@@ -8,7 +8,7 @@ const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v1';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
-const FLUENT_REFRESH_BATCH_SIZE = 2;
+const FLUENT_REFRESH_BATCH_SIZE = 6;
 
 // Adapted from https://github.com/snflkd/fluent-korean (fluent-korean-not-coding).
 // The upstream README asks not to summarize these clauses: examples carry the intended behavior.
@@ -206,6 +206,15 @@ function buildAwkwardKoreanPredicates() {
       OR lc.summary LIKE '이 기능%'
       OR lc.summary LIKE '이 변경%'
       OR lc.summary LIKE '이러한%'
+      OR lc.summary LIKE '이 업데이트%'
+      OR lc.summary LIKE '이 새로운%'
+      OR lc.title LIKE '%기계 시리즈%'
+      OR lc.title LIKE '%소녀%'
+      OR lc.title LIKE '%원롔%'
+      OR lc.title LIKE '%원룱%'
+      OR lc.title LIKE '%증놀%'
+      OR lc.title LIKE '%조백호%'
+      OR lc.title LIKE '%관래밍%'
       OR lc.target LIKE '%Engine를%'
       OR lc.target LIKE '%Platform를%'
       OR lc.target LIKE '%Integration를%'
@@ -224,10 +233,7 @@ function buildFluentRefreshFilter() {
   return `
     lc.lang = 'ko'
     AND IFNULL(lc.model_used, '') != '${FLUENT_KOREAN_MODEL_TAG}'
-    AND IFNULL(lc.model_used, '') != 'manual'
-    AND (
-      ${buildAwkwardKoreanPredicates()}
-    )`;
+    AND IFNULL(lc.model_used, '') != 'manual'`;
 }
 
 const REGION_DISPLAY_MAP = {
@@ -1042,7 +1048,7 @@ function assessTranslationQuality(record, row, lang) {
   if (features.length < 2) reasons.push('features-too-thin');
 
   if (lang === 'ko') {
-    if (/^(이는|또한|이제|이 기능|이 변경|이러한)/.test(summary)) {
+    if (/^(이는|또한|이제|이 기능|이 변경|이러한|이 업데이트|이 새로운)/.test(summary)) {
       reasons.push('summary-omits-subject');
     }
     if (/\b(delivers|announces|now supports|is now available)\b/i.test(title) || (title && !/[가-힣]/.test(title))) {
@@ -1462,7 +1468,7 @@ export default {
       queued += await enqueueMissingTranslations(env, lang, backlogQueueBatchSize);
     }
 
-    // Every 5 min: if no backlog, queue pending reviews
+    // Every 5 min: if no backlog, queue pending reviews and Korean refreshes
     if (minute % 5 === 0 && queued === 0) {
       for (const lang of ['ko', 'en', 'ja']) {
         const pending = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY lc.created_at DESC LIMIT 10').bind(lang).all();
@@ -1471,6 +1477,8 @@ export default {
           await enqueueTranslationJobs(env, jobs, { skipClaim: true });
         }
       }
+      const fluentQueued = await enqueueFluentKoreanRefresh(env, FLUENT_REFRESH_BATCH_SIZE);
+      if (fluentQueued) console.log(`Fluent Korean refresh queued: ${fluentQueued}`);
     }
 
     // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
@@ -1501,14 +1509,6 @@ export default {
         backlog += bl;
       }
       
-      if (backlog === 0) {
-        const fluentDone = await env.DB.prepare(
-          'SELECT count(*) as c FROM localized_content WHERE lang = ? AND model_used = ?'
-        ).bind('ko', FLUENT_KOREAN_MODEL_TAG).first();
-        const fluentBatch = (fluentDone?.c || 0) === 0 ? 10 : FLUENT_REFRESH_BATCH_SIZE;
-        const fluentQueued = await enqueueFluentKoreanRefresh(env, fluentBatch);
-        if (fluentQueued) console.log(`Fluent Korean refresh queued: ${fluentQueued}`);
-      }
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for translation`);
       // Alert on consecutive empty fetches
       if (webhookUrl && n.newArticles === 0) {
@@ -1738,7 +1738,7 @@ export default {
       }
 
       if (action === 'refresh-ko') {
-        const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 25);
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 50);
         const queued = await enqueueFluentKoreanRefresh(env, limit);
         const remaining = await getFluentRefreshRemaining(env);
         return jsonResponse({ queued, remaining, reason: 'fluent_refresh' }, {}, headers);
