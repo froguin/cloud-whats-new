@@ -4,9 +4,9 @@ const RSS_FEEDS = {
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
 };
 
-const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
-const FLUENT_KOREAN_MODEL_TAG = 'fluent-korean-v1';
+const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v1';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
 const FLUENT_REFRESH_BATCH_SIZE = 2;
 
@@ -711,16 +711,20 @@ function calculateRetryDelay(attempts, baseDelay = RETRY_BASE_DELAY_SECONDS, max
 
 function parseAIResponse(aiResp) {
   if (!aiResp) return null;
-  // OpenAI-compatible format (choices[0].message.content)
-  const content = aiResp?.choices?.[0]?.message?.content;
-  if (content) return safeParseJSON(content);
-  // Workers AI format (response)
-  if (aiResp.response && typeof aiResp.response === 'object') return aiResp.response;
-  if (typeof aiResp.response === 'string') {
-    const cleaned = aiResp.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    return safeParseJSON(cleaned);
+  const msg = aiResp?.choices?.[0]?.message || {};
+  const candidates = [msg.content, msg.reasoning, msg.reasoning_content, aiResp.response];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const parsed = safeParseJSON(cleaned);
+      if (parsed) return parsed;
+    }
   }
-  if (typeof aiResp === 'string') return safeParseJSON(aiResp.replace(/<think>[\s\S]*?<\/think>/g, '').trim());
+  if (typeof aiResp === 'string') {
+    return safeParseJSON(aiResp.replace(/<think>[\s\S]*?<\/think>/g, '').trim());
+  }
   return null;
 }
 
@@ -1264,7 +1268,7 @@ async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY
   const aiResp = await env.AI.run(model, {
     messages: [{ role: 'system', content: sysPromptWithHint }, ...fewShot, { role: 'user', content: userMsg }],
     response_format: TRANSLATION_JSON_SCHEMA,
-    max_tokens: 2048, temperature: 0.1,
+    max_tokens: 4096, temperature: 0.1,
   });
   const parsed = parseAIResponse(aiResp);
   if (!parsed || !parsed.title) return null;
