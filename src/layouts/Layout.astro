@@ -34,10 +34,15 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" media="print" onload="this.media='all'" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+    <link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap">
+    </noscript>
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -62,13 +67,27 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
     {structuredDataItems.filter(Boolean).map((item) => (
       <script type="application/ld+json" set:html={JSON.stringify(item)} />
     ))}
-    <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-RQRGQJ1WQR"></script>
     <script is:inline>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-RQRGQJ1WQR', { send_page_view: false });
+      window.addEventListener('load', () => {
+        const script = document.createElement('script');
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=G-RQRGQJ1WQR';
+        script.async = true;
+        script.onload = () => {
+          gtag('js', new Date());
+          gtag('config', 'G-RQRGQJ1WQR', { send_page_view: false });
+          gtag('event', 'page_view', {
+            page_title: document.title,
+            page_location: location.href,
+            page_path: location.pathname,
+          });
+          window.__gaReady = true;
+        };
+        document.head.appendChild(script);
+      });
       document.addEventListener('astro:page-load', () => {
+        if (!window.__gaReady) return;
         gtag('event', 'page_view', {
           page_title: document.title,
           page_location: location.href,

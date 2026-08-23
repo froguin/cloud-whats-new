@@ -12,7 +12,7 @@ const csps = [
 
 const data: Record<string, any[]> = {};
 const results = await Promise.allSettled(
-  csps.map(c => fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=30`).then(r => r.json()))
+  csps.map(c => fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=15`).then(r => r.json()))
 );
 csps.forEach((c, i) => {
   data[c.id] = results[i].status === 'fulfilled' ? results[i].value.items || [] : [];

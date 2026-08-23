@@ -1,7 +1,3 @@
-@import "./segoe-ui.css";
-@import "./google-sans-text.css";
-@import "./amazon-ember.css";
-
 :root {
   --status-ga-bg: rgba(22, 163, 74, 0.08);
   --status-ga-text: #166534;

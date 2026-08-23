@@ -4,7 +4,7 @@
 
 @layer base {    
   body {
-    font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
+    font-family: "Pretendard Variable", "Noto Sans KR", system-ui, sans-serif;
     line-height: 1.6;
   }
 }
