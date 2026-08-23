@@ -57,6 +57,7 @@ Cloudflare Pages (Astro SSR)
 | `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 |
 | `POST /api/pipeline?action=retranslate&id=N` | 특정 기사 재번역 (`&mode=review`로 검수만, `&hint=...` 지원) |
 | `POST /api/pipeline?action=fix-bad` | 품질 미달 기사 일괄 재번역 |
+| `POST /api/pipeline?action=refresh-ko` | 어색한 한국어를 영문 원본 기준으로 재번역 (`limit` 최대 25, 기존 카드는 성공 시에만 덮어씀) |
 | `POST /mcp` | MCP JSON-RPC 엔드포인트 |
 
 ### MCP 도구

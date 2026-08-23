@@ -6,6 +6,54 @@ const RSS_FEEDS = {
 
 const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const FLUENT_KOREAN_MODEL_TAG = 'fluent-korean-v1';
+const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
+const FLUENT_REFRESH_BATCH_SIZE = 2;
+
+// Adapted from https://github.com/snflkd/fluent-korean (fluent-korean-not-coding).
+// The upstream README asks not to summarize these clauses: examples carry the intended behavior.
+const FLUENT_KOREAN_GUIDE = `당신은 한국어를 활용해야 하는 상황에 있다면 본 문서에 제시된 지침들을 준수해야 합니다. 그럼으로써 의사소통의 효율성을 높일 수 있습니다. 이 지침들은, 의미가 명확하며 비교적 가독성이 높고 안정적인 구조를 지닌 한국어 문장을 출력하는 방법을 자세히 설명합니다. JSON 키 이름과 제품명, 버전, 리전 코드, 날짜, 숫자에는 이 지침들을 적용하지 않고 원문을 유지합니다.
+
+## 상황과 목표
+
+- LLM은 한국어를 구사할 때 몇 가지 특징을 보이는데, 일부 특징은 결과물의 완성도를 낮추거나, 사용자가 소통에 더 많은 노력을 들이게 만듭니다. 이 문서에 작성된 사항들을 준수하면 이런 현상을 개선할 수 있습니다.
+
+- 이 문서에서 제시하는 지침들을 요약하는 것은 일반적으로 권장되지 않습니다. 그렇게 한다면 조항마다 첨부된 예시를 확인할 수 없으므로 조항의 문구가 구체적으로 어떤 동작을 의도했는지 파악하기 어렵습니다. 또한 요약에 포함된 몇 가지 지침을 제외한 나머지 지침들은 잘 준수되지 않는 방향으로 서술 압력이 작동하게 될 수도 있습니다. 그리고 목적과 의도를 생략하고 제한 사항만 요약한다면 목적에 부합하지 않게 기계적으로 지침을 준수했는지 확인하게 될 수도 있습니다.
+
+## 동작 범위
+
+1. 본문의 지침들은 한국어를 활용하는 상황에서 그 한국어를 명확하게 출력하라는 지시입니다. 외국어 문장이나 어휘를 출력해야 하는 상황에서, 그것을 한국어로 번역하거나 대체하라는 지시가 아닙니다.
+
+2. 고유 명사와 기술 용어 등은, 통상적인 용례로 정착된 번역어 혹은 음차가 있다면 우선적으로 사용하고, 그렇지 않다면 원어를 유지함으로써, 한국어 사용자가 이해하기 편하고 의미를 잘 이해할 수 있도록 합니다.
+
+3. 사용자가 어떤 어조나 어휘를 사용하든지, 사용자 메시지의 어조를 모방하지 않고, 본문에서 제시하는 지침들을 일관되게 유지합니다.
+
+## 문장 단위
+
+1. 읽는 이가 문장의 의미를 충분히 이해할 수 있어야 하므로, 의미가 있는 문장 성분을 생략하지 않습니다. [그러면 경고가 붙습니다.→ ('그러면 이미 작업중인 파일에도 경고 표지가 추가됩니다.'와 같이, 맥락과 정보를 충분히 제공하도록 수정) ]  특히 관형격 조사인 '~의'를 필요 이상으로 사용한다면, 의미를 담고 있는 문장 성분을 생략하기 쉬우므로 유의해야 합니다.  [사본의 문구는 작업의 상황을 → 사본에 기재된 문구는 작업이 진행되는 상황을]
+
+2. (이 2번 조항은 제목과 목록에는 강제로 적용되는 사항이 아닙니다.) 명사구나 부사구, 연결어미로 문장을 끝내지 말고, 서술어와 종결어미를 사용하여 완성된 형태의 문장으로 끝을 맺어야 합니다.
+
+## 구 단위
+
+1. 필수적인 경우가 아니라면 조사와 어미를 생략하지 말아야 합니다. 또한 부사, 보조사와 선어말어미, 보조 용언을 적극적으로 활용하면, 의미가 명확한 한국어 문장을 완성할 수 있습니다. [이 결정은 이후 중요 정책이 갈리는 자리. 컨텍스트 압축 전 신중 반영한다. → 이 결정은 이후 중요한 정책에 지속적으로 영향을 주기 때문에, 컨텍스트가 압축되기 전에 신중히 반영합니다. → 지금 답변해주신 결정 사항은 이후 중요한 정책에도 지속적으로 영향을 미치기 때문에, 컨텍스트가 압축되기 전에 미리 신중하게 반영해 놓겠습니다.]
+
+2. 구체적인 의미를 담고 있는 한자어와 자연스러운 통사 구조를 결합하면, 풍부하고 명확한 의미를 전달할 수 있습니다. 따라서 맥락에 적합한 한자어를 적극적으로 활용하고, 그 한자어에 조사와 어미를 붙여서 어휘 사이의 관계를 확실하게 나타내야 합니다. [<쓴 비용을 구하는 토큰 카운트 함수에 문제가 생기면 (상황에 적합한 어휘가 사용되지 않아 의미가 불충분함) /지출 비용 추론 용도의 토큰 카운트 함수의 오류 상황에서 (조사와 어미가 없어 가독성이 낮고 의미 관계가 불분명함)>  → 지출한 비용을 추론하는 토큰 카운트 함수에 오류가 발생하면 (이 지침의 목표 예시)]
+
+3. 일반적인 어휘를 사용해야 하는 자리에 비유적 어휘를 사용하면 가독성이 낮고, 의미가 변질되기 쉽습니다. 따라서 꼭 필요한 경우가 아니라면 비유적 어휘로 일반적인 명사나 동사를 대체하지 않습니다. 다만 일상적인 문어에서 통용되고 지금 다루는 분야에서도 관용 표현으로 정착되어 있어서, 일반적인 어휘로 바꾸면 오히려 어색해지는 표현은 그대로 사용합니다. [<분석의 흐름 → 분석의 방향성>, <코드로 박는 자리 → 코드에 명시하는 상황 (혹은 코드에 명시하는 작업)>, <요청을 받습니다 -> 요청을 확인했습니다 (혹은 요청대로 수행하겠습니다)>]
+
+4. 엠대시(—)는 앞뒤 문장의 관계를 지나치게 함축하기 때문에 자제하고, 문맥에 따라 콜론이나 접속사로 대체합니다.
+
+## 이 서비스에 추가로 적용하는 사항
+
+- 한국어로 출력되는 모든 결과물에도 이 지침들을 적용합니다. JSON의 title, summary, target, features, regions 값이 모두 해당합니다.
+- JSON을 출력하기 직전에, 위의 지침들에 어긋난 부분을 반드시 점검하고 수정한 후에 출력합니다.
+- 제품명, 서비스명, 버전, 리전 코드, CVE 번호, 날짜, 수치는 원문을 유지합니다.
+- 클라우드 분야에서 이미 정착된 번역어가 있으면 그 번역어를 사용합니다. [continuous delivery → 지속적 배포, runtime → 런타임, preview → 미리보기, machine series → 머신 시리즈, customer-managed key → 고객 관리 키]
+- 영어 고유명사 뒤의 조사는 실제 발음의 받침을 기준으로 고릅니다. [Compute Engine를 → Compute Engine을, Amazon Bedrock와 → Amazon Bedrock과, Application Integration를 → Application Integration을, Amazon Bedrock을]
+- 요약 첫 문장에서 주어와 핵심 변화를 생략한 채 '이는', '또한', '이제', '이 기능은', '이 변경으로'로 시작하지 않습니다. 영어 원문의 무엇을 바꾸었는지를 첫 문장에 분명히 적습니다.
+- 제목을 영어 원문 그대로 두거나, delivers / announces / now supports 같은 영어 동사에서 자르지 않습니다. [AWS Glue 6.0 delivers → AWS Glue 6.0 가격 인하 및 Iceberg v3 지원]
+- '고객님' 같은 과한 호칭은 사용하지 않습니다.`;
 
 const LANG_PROFILES = {
   ko: {
@@ -14,14 +62,14 @@ const LANG_PROFILES = {
     statuses: ['정식 출시', '미리보기', '베타', '지원 종료'],
     statusMap: { ga: '정식 출시', preview: '미리보기', beta: '베타', retire: '지원 종료' },
     rules: `- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
-- Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title.
-- Summary: Exactly 2 sentences in natural, technical Korean.
-  - First sentence: Describe the key technical change, including specific product names, features, or metrics. Avoid vague descriptions.
+- Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title. Never leave English verbs such as delivers, announces, now supports in the title.
+- Summary: Exactly 2 complete sentences in natural, technical Korean. Each sentence must have a subject and a closing verb ending.
+  - First sentence: State the actual technical change with product names, features, or metrics. Do not start with "이는", "또한", "이제", "이 기능은".
   - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
   - Do NOT use generic template expressions like "이를 통해 효율성이 향상됩니다" or simply repeating the title.
-- Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자".
+- Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자". Attach 을/를, 이/가, 은/는, 과/와 according to the pronounced final sound of the English product name.
 - Regions: Vendor standard Korean region names or "모든 리전".`,
-    sysPrompt: 'You are a Korean cloud news summarizer for IT professionals.'
+    sysPrompt: 'You are a Korean cloud news summarizer for IT professionals. Write clear, fluent Korean that a Korean engineer can read without reconstructing omitted particles or subjects.'
   },
   en: {
     name: 'English',
@@ -72,6 +120,13 @@ ${profile.rules}
 - GCP date entries: ${isKo ? 'YYYY년 M월 D일: main product 외 N건' : isJa ? 'YYYY年M月D日: main productほかN件' : 'YYYY-MM-DD: main product and N other updates'}
 - MUST KEEP ENTITIES in user message — reproduce exactly.`;
 
+  const fluentKoreanBlock = isKo ? `
+
+KOREAN WRITING GUIDE — follow every clause. Do not skip examples.
+${FLUENT_KOREAN_GUIDE}
+
+Before you emit JSON, reread title, summary, target, features, and regions and fix any clause that violates the guide.` : '';
+
   const sysPrompt = `${profile.sysPrompt}
 
 OUTPUT: valid JSON only, no markdown wrapping.
@@ -83,18 +138,19 @@ PROCESS — follow this order:
 4. Fill target (who benefits), features (3 capability descriptions), regions.
 
 RULES:
-${translationRules}`;
+${translationRules}
+${fluentKoreanBlock}`;
 
   return { sysPrompt, rules: translationRules, profile };
 }
 
 const FEW_SHOT_KO = [
   { role: 'user', content: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. Python 3.13 includes improved error messages, a new REPL, and performance improvements. Available in all AWS Regions where Lambda is available.' },
-  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 개선된 오류 메시지와 새로운 REPL, 성능 향상 등 Python 3.13의 주요 기능을 바로 활용할 수 있게 되었습니다. 기존 Python 3.12 함수를 운영 중이라면 런타임 업그레이드를 검토할 시점입니다.","target":"Lambda 기반 서버리스 백엔드를 Python으로 운영하는 백엔드 개발자","features":"Python 3.13 런타임 선택 가능, 오류 메시지 개선, 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"AWS Lambda에서 Python 3.13 런타임을 선택해 함수를 만들고 업데이트할 수 있게 되었습니다. 개선된 오류 메시지와 새로운 REPL, 성능 향상을 쓰려면 기존 Python 3.12 함수의 런타임 업그레이드를 검토해야 합니다.","target":"Python으로 Lambda 기반 서버리스 백엔드를 운영하는 백엔드 개발자","features":"Python 3.13 런타임 선택 가능, 오류 메시지 개선, 콜드스타트 단축 기대","regions":"Lambda가 제공되는 모든 AWS 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: March 27, 2026\nDescription: Cloud Composer: Cloud Composer 2 environments can no longer be created in Melbourne (australia-southeast2). Compute Engine: A vulnerability (CVE-2026-23268) has been addressed.' },
-  { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 1건","summary":"Cloud Composer 2가 Melbourne 리전에서 더 이상 생성할 수 없게 되면서 Cloud Composer 3으로 전환이 필요합니다. Compute Engine에서는 CVE-2026-23268 보안 취약점이 패치되었습니다.","target":"australia-southeast2 리전에서 Cloud Composer를 운영 중인 데이터 엔지니어","features":"Melbourne 리전 Composer 2 생성 중단, CVE-2026-23268 패치 적용, Composer 3 전환 필요","regions":"australia-southeast2, 모든 리전","status":["정식 출시"]}' },
+  { role: 'assistant', content: '{"title":"2026년 3월 27일: Cloud Composer 외 1건","summary":"Melbourne(australia-southeast2) 리전에서는 Cloud Composer 2 환경을 새로 만들 수 없게 되어 Cloud Composer 3으로 전환해야 합니다. Compute Engine에는 CVE-2026-23268 보안 취약점 패치가 적용되었습니다.","target":"australia-southeast2 리전에서 Cloud Composer를 운영하는 데이터 엔지니어","features":"Melbourne 리전 Composer 2 생성 중단, CVE-2026-23268 패치 적용, Composer 3 전환 필요","regions":"australia-southeast2, 모든 리전","status":["정식 출시"]}' },
   { role: 'user', content: 'Title: [Preview] Azure Cosmos DB continuous backup for analytical store\nDescription: Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
-  { role: 'assistant', content: '{"title":"Azure Cosmos DB 분석 저장소 연속 백업 지원","summary":"Azure Cosmos DB 분석 저장소에서 연속 백업과 특정 시점 복원이 가능해졌습니다. 분석 워크로드의 데이터 보호가 한층 강화됩니다.","target":"Azure Cosmos DB 분석 저장소를 운영하는 데이터 엔지니어","features":"분석 저장소 연속 백업, 특정 시점 복원, 데이터 보호 강화","regions":"모든 Azure 퍼블릭 리전","status":["미리보기"]}' }
+  { role: 'assistant', content: '{"title":"Azure Cosmos DB 분석 저장소 연속 백업 지원","summary":"Azure Cosmos DB 분석 저장소에서도 연속 백업과 특정 시점 복원을 사용할 수 있게 되었습니다. 현재 공개 미리보기이므로 운영 워크로드에 적용하기 전에 복원 지점과 보존 기간을 확인해야 합니다.","target":"Azure Cosmos DB 분석 저장소를 운영하는 데이터 엔지니어","features":"분석 저장소 연속 백업, 특정 시점 복원, 공개 미리보기 제공","regions":"모든 Azure 퍼블릭 리전","status":["미리보기"]}' }
 ];
 
 const FEW_SHOT_EN = [
@@ -121,6 +177,12 @@ let translationJobStateReady = false;
 function buildBadQualityFilter() {
   return `
     lc.lang = 'ko' AND lc.reviewed_at IS NULL AND lc.model_used != 'manual' AND (
+      ${buildAwkwardKoreanPredicates()}
+    )`;
+}
+
+function buildAwkwardKoreanPredicates() {
+  return `
       lc.title LIKE '%.graphics%'
       OR lc.title GLOB '* [A-Za-z]'
       OR lc.title GLOB '*[(/-]'
@@ -132,10 +194,38 @@ function buildBadQualityFilter() {
       OR lc.summary LIKE '%\`%'
       OR (lc.status LIKE '%정식 출시%' AND (lc.summary LIKE '%preview%' OR lc.summary LIKE '%미리보기%'))
       OR lc.title LIKE '%and 및%'
+      OR lc.title LIKE '%delivers%'
+      OR lc.title LIKE '%announces%'
+      OR lc.title LIKE '%now supports%'
+      OR lc.title LIKE '%is now available%'
+      OR lc.title NOT GLOB '*[가-힣]*'
+      OR lc.summary LIKE '이는%'
+      OR lc.summary LIKE '또한%'
+      OR lc.summary LIKE '이제 %'
+      OR lc.summary LIKE '이 기능%'
+      OR lc.summary LIKE '이 변경%'
+      OR lc.summary LIKE '이러한%'
+      OR lc.target LIKE '%Engine를%'
+      OR lc.target LIKE '%Platform를%'
+      OR lc.target LIKE '%Integration를%'
+      OR lc.target LIKE '%Bedrock와%'
+      OR lc.target LIKE '%Service를%'
+      OR lc.summary LIKE '%연속 배달%'
       OR lc.summary GLOB '*[一-龥]*'
       OR lc.summary GLOB '*[ぁ-ヿ]*'
       OR lc.title GLOB '*[一-龥]*'
       OR lc.title GLOB '*[ぁ-ヿ]*'
+      OR lc.features GLOB '*[一-龥]*'
+  `;
+}
+
+function buildFluentRefreshFilter() {
+  return `
+    lc.lang = 'ko'
+    AND IFNULL(lc.model_used, '') != '${FLUENT_KOREAN_MODEL_TAG}'
+    AND IFNULL(lc.model_used, '') != 'manual'
+    AND (
+      ${buildAwkwardKoreanPredicates()}
     )`;
 }
 
@@ -330,15 +420,17 @@ const QUALITY_REVIEW_PROMPT = `You are a Korean editor reviewing cloud release-n
 
 GOAL:
 - Catch broken or awkward Korean cards that would look untrustworthy in production.
-- Focus on title completeness, natural Korean, and stray markdown or unfinished English fragments.
+- Focus on title completeness, natural Korean, omitted particles/subjects, and stray markdown or unfinished English fragments.
 - Prefer the official Korean region naming style used by each vendor's Korean documentation.
 
 FAIL if any of these are true:
-- The title looks truncated, incomplete, or cuts a product/service name.
+- The title looks truncated, incomplete, cuts a product/service name, or still contains English verbs such as delivers/announces/now supports.
 - The summary contains stray markdown/code tokens such as _workflow_, **, or backticks.
+- The summary omits the subject and starts with 이는/또한/이제/이 기능은/이 변경으로.
 - The summary reads like literal machine translation and would look awkward to Korean engineers.
+- Particles after English product names are wrong (Compute Engine를, Amazon Bedrock와, Application Integration를).
 - The title is too vague, mirrors the English title too closely, or the summary mostly repeats the title.
-- The summary is not exactly two Korean sentences.
+- The summary is not exactly two Korean sentences with closing verb endings.
 - The regions field uses made-up shorthand or mixes inconsistent region naming styles.
 
 EDITING RULES:
@@ -928,6 +1020,19 @@ function assessTranslationQuality(record, row, lang) {
   if (!target || target === 'all') reasons.push('target-too-generic');
   if (features.length < 2) reasons.push('features-too-thin');
 
+  if (lang === 'ko') {
+    if (/^(이는|또한|이제|이 기능|이 변경|이러한)/.test(summary)) {
+      reasons.push('summary-omits-subject');
+    }
+    if (/\b(delivers|announces|now supports|is now available)\b/i.test(title) || (title && !/[가-힣]/.test(title))) {
+      reasons.push('title-not-translated');
+    }
+    if (/(Engine|Platform|Integration|Service|Function|Cluster)를/.test(title + target + summary)
+        || /Bedrock와/.test(title + target + summary)) {
+      reasons.push('awkward-particle');
+    }
+  }
+
   // Status validation: beta/preview must have evidence in description
   const statusStr = JSON.stringify(record.status || '').toLowerCase();
   const descLower = String(row.description_en || '').toLowerCase();
@@ -975,10 +1080,19 @@ async function reviewTranslationQualityWithAI(env, row, record, lang, hint = '')
   
   const profile = LANG_PROFILES[lang] || LANG_PROFILES.ko;
   const sysRules = getTranslationPrompt(lang).rules;
+  const koreanFluencyChecks = lang === 'ko' ? `
+Korean fluency — fix these if present, using the English original as the source of truth:
+- Summary starts with 이는/또한/이제/이 기능/이 변경 and omits the actual change
+- Title still contains English verbs such as delivers, announces, now supports, or is truncated mid-word
+- Wrong particles after English names: Compute Engine를, Application Integration를, Amazon Bedrock와
+- Telegraphic noun strings missing 조사/어미, or calques like 연속 배달 instead of 지속적 배포
+- Include "summary" in the output JSON when you rewrite it
+` : '';
   
-  const reviewPrompt = `You review ${profile.name} cloud news cards. Your job is to find exactly 3 errors or issues in the translation/summary. Compare the translated/summarized fields against the original English and check these rules:
+  const reviewPrompt = `You review ${profile.name} cloud news cards. Compare the translated/summarized fields against the original English and check these rules:
 
 ${sysRules}
+${koreanFluencyChecks}
 
 Find and fix these specific problems:
 1. ${lang === 'ja' ? 'Garbled characters' : 'Chinese characters (漢字), Japanese kana, or any non-target language characters'}
@@ -986,21 +1100,23 @@ Find and fix these specific problems:
 3. Garbled, truncated, or unnaturally translated text
 4. Status field contradicting the description context
 5. Title that is too vague, incomplete, or mirrors the English too closely
+${lang === 'ko' ? '6. Awkward Korean that a Korean engineer would have to reconstruct' : ''}
 
 OUTPUT JSON with corrected fields only. Omit fields that are correct.
-{"title":"...", "status":[...], "regions":"...", "target":"...", "features":"..."}
+{"title":"...","summary":"...","status":[...],"regions":"...","target":"...","features":"..."}
 If you cannot find any real errors after thorough review, output: {"pass":true}`;
 
   const reviewPromptWithHint = hint ? `${reviewPrompt}\n\n=== 추가 지시 ===\n${hint}` : reviewPrompt;
   try {
     const aiResp = await env.AI.run(REVIEW_MODEL, {
       messages: [{ role: 'system', content: reviewPromptWithHint }, { role: 'user', content: reviewInput }],
-      max_tokens: 384, temperature: 0.1,
+      max_tokens: lang === 'ko' ? 640 : 384, temperature: 0.1,
     });
     const parsed = parseAIResponse(aiResp);
     if (!parsed || parsed.pass === true) return { pass: true, reasons: [], record };
     const fixed = { ...record };
     if (parsed.title) fixed.title = parsed.title.replace(/\s*[\[\(](?:Launched|Preview|Retired|GA|정식 출시|미리보기|베타|지원 종료|一般提供|プレビュー|ベータ|サポート終了)[\]\)]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (parsed.summary) fixed.summary = String(parsed.summary).replace(/\s+/g, ' ').trim();
     if (parsed.status) {
       let s = parsed.status;
       if (typeof s === 'string') try { s = JSON.parse(s); } catch {}
@@ -1126,10 +1242,10 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
-function getTranslationExecutionOptions(reason = 'backlog') {
+function getTranslationExecutionOptions(reason = 'backlog', extras = {}) {
   return {
     model: PRIMARY_MODEL,
-    allowLowQuality: reason === 'quality_retry',
+    allowLowQuality: reason === 'quality_retry' && !extras.refresh,
   };
 }
 
@@ -1205,8 +1321,8 @@ async function runReviewPipeline(env, row, lang, hint = '') {
   return { ok: true };
 }
 
-async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint = '') {
-  const options = getTranslationExecutionOptions(reason);
+async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint = '', extras = {}) {
+  const options = getTranslationExecutionOptions(reason, extras);
   const record = await buildTranslationRecord(env, row, lang, hint, options.model);
   if (!record) {
     return { ok: false, needsRetry: false };
@@ -1220,7 +1336,14 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
   if (!quality.pass && !options.allowLowQuality) {
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
-  await persistTranslationRecord(env, row, reviewed.record, lang, REVIEW_MODEL, { isReview: true });
+  await persistTranslationRecord(
+    env,
+    row,
+    reviewed.record,
+    lang,
+    lang === 'ko' ? FLUENT_KOREAN_MODEL_TAG : REVIEW_MODEL,
+    { isReview: true },
+  );
   return { ok: true, quality };
 }
 
@@ -1258,6 +1381,48 @@ async function getMissingTranslationCount(env, lang = 'ko') {
     )
   `).bind(lang).first();
   return row?.missing || 0;
+}
+
+async function getFluentRefreshRemaining(env) {
+  const row = await env.DB.prepare(`
+    SELECT count(*) as count
+    FROM localized_content lc
+    JOIN articles a ON a.id = lc.article_id
+    WHERE ${buildFluentRefreshFilter()}
+  `).first();
+  return row?.count || 0;
+}
+
+async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE) {
+  const rows = await env.DB.prepare(`
+    SELECT lc.article_id
+    FROM localized_content lc
+    JOIN articles a ON a.id = lc.article_id
+    WHERE ${buildFluentRefreshFilter()}
+      AND NOT EXISTS (
+        SELECT 1 FROM translation_job_state s
+        WHERE s.article_id = lc.article_id AND s.lang = 'ko'
+      )
+    ORDER BY lc.pub_date DESC
+    LIMIT ?
+  `).bind(limit).all();
+  const jobs = rows.results.map((row) => ({
+    articleId: row.article_id,
+    lang: 'ko',
+    reason: 'fluent_refresh',
+  }));
+  if (jobs.length === 0) return 0;
+  await ensureTranslationJobStateTable(env);
+  await env.DB.batch(jobs.map((job) =>
+    env.DB.prepare(`
+      INSERT INTO translation_job_state (article_id, lang, reason, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT(article_id, lang) DO UPDATE SET
+        reason = excluded.reason,
+        updated_at = datetime('now')
+    `).bind(job.articleId, job.lang, job.reason)
+  ));
+  return enqueueTranslationJobs(env, jobs, { skipClaim: true });
 }
 
 export default {
@@ -1311,6 +1476,14 @@ export default {
         backlog += bl;
       }
       
+      if (backlog === 0) {
+        const fluentDone = await env.DB.prepare(
+          'SELECT count(*) as c FROM localized_content WHERE lang = ? AND model_used = ?'
+        ).bind('ko', FLUENT_KOREAN_MODEL_TAG).first();
+        const fluentBatch = (fluentDone?.c || 0) === 0 ? 10 : FLUENT_REFRESH_BATCH_SIZE;
+        const fluentQueued = await enqueueFluentKoreanRefresh(env, fluentBatch);
+        if (fluentQueued) console.log(`Fluent Korean refresh queued: ${fluentQueued}`);
+      }
       console.log(`Fetch cron — ${n.newArticles} new articles, ${n.queued} queued immediately, ${backlog} waiting for translation`);
       // Alert on consecutive empty fetches
       if (webhookUrl && n.newArticles === 0) {
@@ -1350,13 +1523,15 @@ export default {
         }
 
         await touchTranslationJob(env, articleId, lang, reason);
-        if (await hasLocalizedContent(env, articleId, lang)) {
+        const isRefresh = reason === 'fluent_refresh' || !!msg.body?.refresh;
+        const canOverwrite = OVERWRITE_TRANSLATION_REASONS.has(reason);
+        if (!canOverwrite && await hasLocalizedContent(env, articleId, lang)) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
           continue;
         }
 
-        const result = await runTranslationPipeline(env, row, lang, reason, hint);
+        const result = await runTranslationPipeline(env, row, lang, reason, hint, { refresh: isRefresh });
         if (result?.ok) {
           await releaseTranslationJobs(env, [{ articleId, lang }]);
           msg.ack();
@@ -1373,10 +1548,18 @@ export default {
             if (r === 'markdown-artifact') return isKo ? '마크다운 제거' : isJa ? 'マークダウン削除' : 'Remove markdown formatting';
             if (r === 'summary-not-two-sentences') return isKo ? '요약은 정확히 2문장' : isJa ? '要約は正確に2文' : 'Summary must be exactly 2 sentences';
             if (r === 'target-too-generic') return isKo ? '대상을 구체적으로 작성' : isJa ? '対象を具体的に記述してください' : 'Target must be specific';
+            if (r === 'summary-omits-subject') return '요약 첫 문장에 주어와 핵심 변화를 명시하고 이는/또한/이제로 시작하지 말 것';
+            if (r === 'awkward-particle') return '영어 제품명 뒤 조사는 발음 받침 기준으로 고를 것 (Engine을, Bedrock과, Integration을)';
             return r;
           }).join('. ');
           await touchTranslationJob(env, articleId, lang, 'quality_retry');
-          await enqueueTranslationJobs(env, [{ articleId, lang, reason: 'quality_retry', hint: qualityHint }], { skipClaim: true });
+          await enqueueTranslationJobs(env, [{ articleId, lang, reason: 'quality_retry', hint: qualityHint, refresh: isRefresh }], { skipClaim: true });
+          msg.ack();
+          continue;
+        }
+
+        if (isRefresh) {
+          await touchTranslationJob(env, articleId, lang, 'fluent_failed');
           msg.ack();
           continue;
         }
@@ -1528,17 +1711,30 @@ export default {
         return jsonResponse({ found: bad.results.length, retried }, {}, headers);
       }
 
+      if (action === 'refresh-ko') {
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 25);
+        const queued = await enqueueFluentKoreanRefresh(env, limit);
+        const remaining = await getFluentRefreshRemaining(env);
+        return jsonResponse({ queued, remaining, reason: 'fluent_refresh' }, {}, headers);
+      }
+
       return jsonResponse({ error: 'invalid action' }, { status: 400 }, headers);
     }
 
     if (path === '/api/stats') {
-      const [byLang, byModel, backlog, queue, reviewed, staleJobs] = await Promise.all([
+      const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
         env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
         env.DB.prepare('SELECT count(*) as count, reason FROM translation_job_state GROUP BY reason').all(),
         env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
         env.DB.prepare("SELECT count(*) as count FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first(),
+        env.DB.prepare(`
+          SELECT count(*) as count
+          FROM localized_content lc
+          JOIN articles a ON a.id = lc.article_id
+          WHERE ${buildFluentRefreshFilter()}
+        `).first(),
       ]);
       return jsonResponse({
         by_lang: byLang.results,
@@ -1546,6 +1742,7 @@ export default {
         backlog: backlog?.count || 0,
         queue: { active: queue.results, stale: staleJobs?.count || 0 },
         review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },
+        fluent_korean: { remaining: fluentRemaining?.count || 0, tag: FLUENT_KOREAN_MODEL_TAG },
       }, {}, headers);
     }
 
