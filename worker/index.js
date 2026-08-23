@@ -199,6 +199,7 @@ function buildAwkwardKoreanPredicates() {
       OR lc.title LIKE '%now supports%'
       OR lc.title LIKE '%is now available%'
       OR lc.title NOT GLOB '*[가-힣]*'
+      OR (lc.title LIKE 'Azure:%' AND replace(lc.title, 'Azure:', '') NOT GLOB '*[A-Za-z]*')
       OR lc.summary LIKE '이는%'
       OR lc.summary LIKE '또한%'
       OR lc.summary LIKE '이제 %'
@@ -849,6 +850,20 @@ function buildVendorPromptHints(row) {
   return lines.join('\n');
 }
 
+function hangulTokens(text) {
+  return [...new Set(String(text || '').match(/[가-힣]{2,}/g) || [])];
+}
+
+function koreanTitleLooksHallucinated(title, summary) {
+  const generic = /^(정보|코드|기능|지원|사용|관련|업데이트|서비스|설정|구성|출시|제공|가능|관리|카드)$/;
+  const titleTokens = hangulTokens(title).filter((token) => !generic.test(token));
+  const summaryTokens = hangulTokens(summary);
+  if (titleTokens.length < 2 || summaryTokens.length < 2) return false;
+  return !titleTokens.some((token) =>
+    summaryTokens.some((other) => other.includes(token) || token.includes(other))
+  );
+}
+
 function countSentences(text) {
   return String(text || '')
     .replace(/(\d)\.(\d)/g, '$1·$2')
@@ -1036,6 +1051,9 @@ function assessTranslationQuality(record, row, lang) {
     if (/(Engine|Platform|Integration|Service|Function|Cluster)를/.test(title + target + summary)
         || /Bedrock와/.test(title + target + summary)) {
       reasons.push('awkward-particle');
+    }
+    if (koreanTitleLooksHallucinated(title, summary)) {
+      reasons.push('title-hallucinated');
     }
   }
 
@@ -1557,6 +1575,7 @@ export default {
             if (r === 'target-too-generic') return isKo ? '대상을 구체적으로 작성' : isJa ? '対象を具体的に記述してください' : 'Target must be specific';
             if (r === 'summary-omits-subject') return '요약 첫 문장에 주어와 핵심 변화를 명시하고 이는/또한/이제로 시작하지 말 것';
             if (r === 'awkward-particle') return '영어 제품명 뒤 조사는 발음 받침 기준으로 고를 것 (Engine을, Bedrock과, Integration을)';
+            if (r === 'title-hallucinated') return '제목이 영문 원문과 무관한 한국어로 바뀌면 안 됨. 제품명과 핵심 변경을 유지할 것';
             return r;
           }).join('. ');
           await touchTranslationJob(env, articleId, lang, 'quality_retry');
