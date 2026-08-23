@@ -5,7 +5,7 @@ const RSS_FEEDS = {
 };
 
 const PRIMARY_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const FLUENT_KOREAN_MODEL_TAG = 'fluent-korean-v1';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
 const FLUENT_REFRESH_BATCH_SIZE = 2;
