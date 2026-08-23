@@ -847,6 +847,8 @@ function buildVendorPromptHints(row) {
 
 function countSentences(text) {
   return String(text || '')
+    .replace(/(\d)\.(\d)/g, '$1·$2')
+    .replace(/\.{2,}/g, '…')
     .split(/[.!?。]+/)
     .map((part) => part.trim())
     .filter(Boolean).length;
@@ -1334,6 +1336,7 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
   // Final quality gate
   const quality = assessTranslationQuality(reviewed.record, row, lang);
   if (!quality.pass && !options.allowLowQuality) {
+    console.log(`quality fail article=${row.id} lang=${lang} reason=${reason} reasons=${(quality.reasons || []).join(',')}`);
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
   }
   await persistTranslationRecord(
