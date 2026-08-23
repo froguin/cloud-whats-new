@@ -76,6 +76,24 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
         });
       });
     </script>
+    <script is:inline>
+      (function () {
+        function isDark() {
+          const stored = localStorage.getItem('theme');
+          if (stored === 'dark') return true;
+          if (stored === 'light') return false;
+          return window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+        function applyTheme(root) {
+          if (isDark()) root.setAttribute('data-theme', 'dark');
+          else root.removeAttribute('data-theme');
+        }
+        applyTheme(document.documentElement);
+        document.addEventListener('astro:before-swap', (event) => {
+          applyTheme(event.newDocument.documentElement);
+        });
+      })();
+    </script>
     <ClientRouter />
   </head>
   <body class="transition-colors duration-200">
@@ -109,16 +127,7 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
         © {new Date().getFullYear()} Cloud ☁️ What's New <span class="hidden sm:inline">한국어 요약</span> <span class="text-[10px] sm:text-xs font-normal opacity-50"><span class="sm:hidden">β</span><span class="hidden sm:inline">Beta</span></span>. Not affiliated with Amazon Web Services, Google Cloud, or Microsoft Azure.
       </div>
     </footer>
-    <script is:inline>
-      // 1. Run immediately on body parse to prevent dark mode screen flash
-      (function() {
-        const isDark = localStorage.getItem('theme') === 'dark' ||
-          (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
-      })();
-    </script>
     <script>
-      // 2. Bind event listeners on page load and page transition
       function initThemeToggle() {
         const html = document.documentElement;
         const toggle = document.getElementById('theme-toggle');
@@ -127,7 +136,7 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
         if (!toggle || !iconDark || !iconLight) return;
 
         function updateIcons() {
-          const dark = html.hasAttribute('data-theme');
+          const dark = html.getAttribute('data-theme') === 'dark';
           iconDark.classList.toggle('hidden', dark);
           iconLight.classList.toggle('hidden', !dark);
           toggle.setAttribute('aria-pressed', dark ? 'true' : 'false');
@@ -135,15 +144,15 @@ const structuredDataItems = Array.isArray(structuredData) ? structuredData : [st
 
         updateIcons();
 
-        // Bind click handler (using onclick to avoid duplicate listeners on page swap)
         toggle.onclick = () => {
-          html.hasAttribute('data-theme') ? html.removeAttribute('data-theme') : html.setAttribute('data-theme', 'dark');
-          localStorage.setItem('theme', html.hasAttribute('data-theme') ? 'dark' : 'light');
+          const nextDark = html.getAttribute('data-theme') !== 'dark';
+          if (nextDark) html.setAttribute('data-theme', 'dark');
+          else html.removeAttribute('data-theme');
+          localStorage.setItem('theme', nextDark ? 'dark' : 'light');
           updateIcons();
         };
       }
 
-      // Run on initial load and after every View Transition navigation
       document.addEventListener('astro:page-load', initThemeToggle);
     </script>
   </body>
