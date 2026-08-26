@@ -1,3 +1,11 @@
+/* Vendor brand fonts — required on every page, including the home page,
+ * where all three CSP sections are rendered side by side. Do not move these
+ * behind a per-vendor conditional import for performance: the home page must
+ * ship AWS / Google Cloud / Azure brand faces. */
+@import "./segoe-ui.css";
+@import "./google-sans-text.css";
+@import "./amazon-ember.css";
+
 :root {
   --status-ga-bg: rgba(22, 163, 74, 0.08);
   --status-ga-text: #166534;
