@@ -943,6 +943,18 @@ function findInventedAcronyms(text, source) {
   return out;
 }
 
+function summaryFirstSentenceRepeatsTitle(summary, title) {
+  const first = splitKoreanSentences(summary)[0] || '';
+  const norm = (t) => String(t || '').replace(/[^가-힣A-Za-z0-9]/g, '').toLowerCase();
+  const a = norm(title), b = norm(first);
+  if (a.length < 10 || b.length < 10) return false;
+  if (b.startsWith(a) && b.length - a.length < 12) return true;   // title + a verb ending
+  const bigrams = (t) => { const set = new Set(); for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2)); return set; };
+  const ta = bigrams(a), tb = bigrams(b);
+  let inter = 0; for (const g of ta) if (tb.has(g)) inter++;
+  return inter / new Set([...ta, ...tb]).size >= 0.8;
+}
+
 function countSentences(text) {
   return String(text || '')
     .replace(/(\d)\.(\d)/g, '$1·$2')
@@ -1011,19 +1023,13 @@ function applyDeterministicFixes(record, row, lang) {
     }
   }
 
-  // Fix 3: Summary repeats title
-  const titleNorm = title.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  const summaryFirst = summary.split(/[.。!]/)[0] || '';
-  const summaryFirstNorm = summaryFirst.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  if (titleNorm && summaryFirstNorm && titleNorm.length > 10) {
-    const bigrams = (s) => { const b = new Set(); for (let i = 0; i < s.length - 1; i++) b.add(s.slice(i, i+2)); return b; };
-    const tb = bigrams(titleNorm), sb = bigrams(summaryFirstNorm);
-    const intersection = [...tb].filter(x => sb.has(x)).length;
-    const union = new Set([...tb, ...sb]).size;
-    if (union > 0 && intersection / union > 0.6) {
-      const rest = summary.slice(summaryFirst.length).replace(/^[.。!\s]+/, '').trim();
-      if (rest.length > 20) summary = rest;
-    }
+  // Fix 3: Summary repeats title — drop a first sentence that is a near-verbatim copy of the title.
+  // (The previous ASCII-only bigram comparison ignored every Hangul character, so any Korean sentence
+  //  opening with the product name matched and was stripped, which then tripped title-hallucinated.)
+  if (summaryFirstSentenceRepeatsTitle(summary, title)) {
+    const sentences = splitKoreanSentences(summary);
+    const rest = sentences.slice(1).join(' ').trim();
+    if (rest.length > 20) summary = rest;
   }
 
   // Fix 4: Features — strip product-name-only items (only for non-English translations)
@@ -1123,7 +1129,8 @@ function assessTranslationQuality(record, row, lang) {
   if (summary.length < 30) reasons.push('summary-too-short');
   const sentenceCount = countSentences(summary);
   if (lang === 'ko' ? (sentenceCount < 1 || sentenceCount > 2) : sentenceCount !== 2) reasons.push('summary-sentence-count');
-  if (summary.slice(0, 24) === title.slice(0, 24)) reasons.push('summary-repeats-title');
+  // A summary whose first sentence opens with the product name is normal Korean; only flag a near-verbatim copy of the title.
+  if (summaryFirstSentenceRepeatsTitle(summary, title)) reasons.push('summary-repeats-title');
   if (!target || target === 'all') reasons.push('target-too-generic');
   if (features.length < 2) reasons.push('features-too-thin');
 
@@ -1622,6 +1629,11 @@ export default {
 
     // Every 15 min (:00, :15, :30, :45): fetch RSS + cleanup + stale claim
     if (minute % 15 === 0) {
+      // Cards that failed a fluent refresh get another attempt after 24h (rules and models keep improving).
+      await env.DB.prepare(`
+        DELETE FROM translation_job_state
+        WHERE lang = 'ko' AND reason = 'fluent_failed' AND updated_at < datetime('now', '-1 day')
+      `).run();
       const n = await fetchRSS(env);
       const webhookUrl = env.ALERT_WEBHOOK_URL;
       const expired = await env.DB.prepare("SELECT id FROM articles WHERE pub_date < datetime('now', '-30 days')").all();
@@ -1883,6 +1895,14 @@ export default {
         return jsonResponse({ found: bad.results.length, retried }, {}, headers);
       }
 
+      if (action === 'release-failed') {
+        // Put cards that failed a fluent refresh back into the refresh pool (e.g. after loosening a validator).
+        const res = await env.DB.prepare(`
+          DELETE FROM translation_job_state
+          WHERE lang = 'ko' AND (reason = 'fluent_failed' OR (reason = 'quality_retry' AND updated_at < datetime('now', '-30 minutes')))
+        `).run();
+        return jsonResponse({ released: res.meta?.changes ?? 0 }, {}, headers);
+      }
       if (action === 'refresh-ko') {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || String(FLUENT_REFRESH_BATCH_SIZE), 10) || FLUENT_REFRESH_BATCH_SIZE, 50);
         const queued = await enqueueFluentKoreanRefresh(env, limit);
