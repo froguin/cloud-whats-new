@@ -957,7 +957,11 @@ function summaryFirstSentenceRepeatsTitle(summary, title) {
   return inter / new Set([...ta, ...tb]).size >= 0.8;
 }
 
-function countSentences(text) {
+function countSentences(text, lang = 'ko') {
+  // Korean: split only on sentence punctuation followed by whitespace, the same rule the two-sentence
+  // trim uses — otherwise "Node.js", "Z.ai", "v1.36.0-gke.2800" count as extra sentences and a card
+  // that was just trimmed to two sentences still fails summary-sentence-count.
+  if (lang === 'ko') return splitKoreanSentences(text).length;
   return String(text || '')
     .replace(/(\d)\.(\d)/g, '$1·$2')
     .replace(/\.{2,}/g, '…')
@@ -1136,7 +1140,7 @@ function assessTranslationQuality(record, row, lang) {
   }
   
   if (summary.length < 30) reasons.push('summary-too-short');
-  const sentenceCount = countSentences(summary);
+  const sentenceCount = countSentences(summary, lang);
   if (lang === 'ko' ? (sentenceCount < 1 || sentenceCount > 2) : sentenceCount !== 2) reasons.push('summary-sentence-count');
   // A summary whose first sentence opens with the product name is normal Korean; only flag a near-verbatim copy of the title.
   if (summaryFirstSentenceRepeatsTitle(summary, title)) reasons.push('summary-repeats-title');
