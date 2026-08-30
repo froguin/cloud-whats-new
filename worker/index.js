@@ -1034,6 +1034,13 @@ function applyDeterministicFixes(record, row, lang) {
     if (rest.length > 20) summary = rest;
   }
 
+  // Fix 3b (ko): the model still emits 3+ sentences on some cards even with the 1–2 sentence rule; the
+  // extra sentences were instructions/filler on every v1 sample, so keep the first two instead of failing.
+  if (lang === 'ko') {
+    const sentences = splitKoreanSentences(summary);
+    if (sentences.length > 2) summary = sentences.slice(0, 2).join(' ');
+  }
+
   // Fix 4: Features — strip product-name-only items (only for non-English translations)
   if (lang !== 'en') {
     const featList = features.split(',').map(f => f.trim()).filter(f => {
