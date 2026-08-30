@@ -919,7 +919,9 @@ function koreanSecondSentenceIsRedundant(summary, title, target) {
     for (const t of second) if (ref.has(t)) hit++;
     return hit / second.size;
   };
-  return overlapRatio(sentences[0]) >= 0.7
+  // Calibrated on live v2 output: padded second sentences scored 0.64–0.67 against the first
+  // sentence, sentences carrying new detail scored ≤ 0.45.
+  return overlapRatio(sentences[0]) >= 0.6
     || overlapRatio(target) >= 0.7
     || overlapRatio(`${title} ${target}`) >= 0.8;
 }

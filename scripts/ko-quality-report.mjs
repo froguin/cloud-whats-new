@@ -20,7 +20,7 @@ function checks(card) {
   const sents = splitSentences(summary);
   const r = [];
   if (sents.length < 1 || sents.length > 2) r.push('sentence-count');
-  if (sents.length >= 2 && (overlap(sents[1], sents[0]) >= 0.7 || overlap(sents[1], target) >= 0.7 || overlap(sents[1], `${title} ${target}`) >= 0.8)) r.push('redundant-2nd');
+  if (sents.length >= 2 && (overlap(sents[1], sents[0]) >= 0.6 || overlap(sents[1], target) >= 0.7 || overlap(sents[1], `${title} ${target}`) >= 0.8)) r.push('redundant-2nd');
   if (/(?:합니다|됩니다|습니다|[다요])\.?$/.test(title) || /\.$/.test(title)) r.push('title-is-sentence');
   if (title.length > 55) r.push('title>55');
   if (/^(이는|또한|이제|이 기능|이 변경|이러한|이 업데이트|이 새로운)/.test(summary)) r.push('omits-subject');
