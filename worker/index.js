@@ -1491,16 +1491,18 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
   const fixed = applyDeterministicFixes(record, row, lang);
   // AI review with different model — checks title, status, regions
   const reviewed = await reviewTranslationQualityWithAI(env, row, fixed, lang, hint);
+  // The reviewer may rewrite title/summary (e.g. back to 3+ sentences), so re-apply the deterministic fixes.
+  const finalRecord = applyDeterministicFixes(reviewed.record, row, lang);
   // Final quality gate
-  const quality = assessTranslationQuality(reviewed.record, row, lang);
+  const quality = assessTranslationQuality(finalRecord, row, lang);
   if (!quality.pass && !options.allowLowQuality) {
     console.log(`quality fail article=${row.id} lang=${lang} reason=${reason} reasons=${(quality.reasons || []).join(',')}`);
-    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: reviewed.record };
+    return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: finalRecord };
   }
   await persistTranslationRecord(
     env,
     row,
-    reviewed.record,
+    finalRecord,
     lang,
     lang === 'ko' ? FLUENT_KOREAN_MODEL_TAG : REVIEW_MODEL,
     { isReview: true },
