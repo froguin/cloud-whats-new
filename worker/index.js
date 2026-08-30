@@ -1495,6 +1495,13 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
   const finalRecord = applyDeterministicFixes(reviewed.record, row, lang);
   // Final quality gate
   const quality = assessTranslationQuality(finalRecord, row, lang);
+  // Soft rules: worth one retry with a hint, but a long title should not leave the card stuck on the old text.
+  const SOFT_REASONS = new Set(['title-too-long']);
+  const onlySoft = !quality.pass && quality.reasons.every((r) => SOFT_REASONS.has(r));
+  if (onlySoft && reason === 'quality_retry') {
+    console.log(`quality soft-pass article=${row.id} lang=${lang} reasons=${quality.reasons.join(',')}`);
+    quality.pass = true;
+  }
   if (!quality.pass && !options.allowLowQuality) {
     console.log(`quality fail article=${row.id} lang=${lang} reason=${reason} reasons=${(quality.reasons || []).join(',')}`);
     return { ok: false, needsRetry: true, reasons: quality.reasons, quality, record: finalRecord };
