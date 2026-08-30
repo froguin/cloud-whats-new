@@ -6,7 +6,9 @@ const RSS_FEEDS = {
 
 const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
-const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v1';
+// v2 (2026-08-30): 1–2 sentence summaries, no padding/restating, title/acronym/imperative checks.
+// Bumping this tag re-queues every Korean card through enqueueFluentKoreanRefresh (FLUENT_REFRESH_DAILY_CAP per day).
+const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v2';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
 const FLUENT_REFRESH_BATCH_SIZE = 4;
 const FLUENT_REFRESH_DAILY_CAP = 100;
@@ -63,11 +65,12 @@ const LANG_PROFILES = {
     statuses: ['정식 출시', '미리보기', '베타', '지원 종료'],
     statusMap: { ga: '정식 출시', preview: '미리보기', beta: '베타', retire: '지원 종료' },
     rules: `- Translate ALL other English to Korean. Never mix (e.g. write "및" not "and 및").
-- Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). Never use a full sentence as title. Never leave English verbs such as delivers, announces, now supports in the title.
-- Summary: Exactly 2 complete sentences in natural, technical Korean. Each sentence must have a subject and a closing verb ending.
+- Title: Product name + core change, max 40 Korean characters. Remove status tags like [Preview], [Launched], [Retired], (GA). The title is a noun phrase, never a full sentence — it must not end with 합니다/됩니다/다. or a period. Never leave English verbs such as delivers, announces, now supports in the title. Never coin an acronym that is not in the source (write "Trusted Launch as Default", not "TLaD").
+- Summary: 1 or 2 complete sentences in natural, technical Korean. Each sentence must have a subject and a closing verb ending.
   - First sentence: State the actual technical change with product names, features, or metrics. Do not start with "이는", "또한", "이제", "이 기능은".
-  - Second sentence: Explain the practical impact, compatibility notes, or actions required for developers/engineers (e.g. upgrade paths, deprecated versions, or default setting changes).
-  - Do NOT use generic template expressions like "이를 통해 효율성이 향상됩니다" or simply repeating the title.
+  - Second sentence ONLY if the source gives new information not already in the first sentence: how to enable it, limits, prerequisites, deprecated versions, pricing, or regions. If there is nothing new, write ONE sentence.
+  - Never pad: do not restate the title, do not restate the target audience as a sentence ("~를 운영하는 관리자는 ~를 관리해야 합니다"), do not repeat the first sentence with different wording, and do not add generic template expressions like "이를 통해 효율성이 향상됩니다".
+  - No instructions to the reader (참조하세요, 사용하세요, 확인하십시오). Describe facts only.
 - Target: A specific target audience (e.g., "AWS Lambda를 사용하는 백엔드 개발자" or "Cloud Composer를 운영하는 데이터 엔지니어"). Avoid generic targets like "모든 개발자". Attach 을/를, 이/가, 은/는, 과/와 according to the pronounced final sound of the English product name.
 - Regions: Vendor standard Korean region names or "모든 리전".`,
     sysPrompt: 'You are a Korean cloud news summarizer for IT professionals. Write clear, fluent Korean that a Korean engineer can read without reconstructing omitted particles or subjects.'
@@ -133,7 +136,7 @@ Before you emit JSON, reread title, summary, target, features, and regions and f
 OUTPUT: valid JSON only, no markdown wrapping.
 
 PROCESS — follow this order:
-1. Read the Description and summarize in ${profile.nameLocal} (2 sentences: what changed + why it matters).
+1. Read the Description and summarize in ${profile.nameLocal} (1–2 sentences: what changed, plus one sentence of concrete detail only if the source has it).
 2. From the summary, derive a short ${profile.nameLocal} title: product name + core change.
 3. Determine status from description content.
 4. Fill target (who benefits), features (3 capability descriptions), regions.
@@ -199,6 +202,19 @@ function buildAwkwardKoreanPredicates() {
       OR lc.title LIKE '%announces%'
       OR lc.title LIKE '%now supports%'
       OR lc.title LIKE '%is now available%'
+      OR lc.title LIKE '%합니다'
+      OR lc.title LIKE '%됩니다'
+      OR lc.title LIKE '%다.'
+      OR lc.title LIKE '% Feature For %'
+      OR lc.title LIKE '% Feature %'
+      OR lc.title LIKE '%TLaD%'
+      OR (lc.title LIKE '%Amazon Connect Customer%' AND lc.title NOT LIKE '%Customer Profiles%')
+      OR lc.summary LIKE '%하세요.%'
+      OR lc.summary LIKE '%하십시오.%'
+      OR lc.summary LIKE '%. 또한 %'
+      OR lc.summary GLOB '*[a-z][a-z][a-z]하거나*'
+      OR lc.summary GLOB '*[a-z][a-z][a-z]하여 *'
+      OR lc.summary GLOB '*[a-z][a-z][a-z]합니다*'
       OR lc.title NOT GLOB '*[가-힣]*'
       OR (lc.title LIKE 'Azure:%' AND replace(lc.title, 'Azure:', '') NOT GLOB '*[A-Za-z]*')
       OR lc.summary LIKE '이는%'
@@ -438,7 +454,9 @@ FAIL if any of these are true:
 - The summary reads like literal machine translation and would look awkward to Korean engineers.
 - Particles after English product names are wrong (Compute Engine를, Amazon Bedrock와, Application Integration를).
 - The title is too vague, mirrors the English title too closely, or the summary mostly repeats the title.
-- The summary is not exactly two Korean sentences with closing verb endings.
+- The summary is not one or two Korean sentences with closing verb endings, or the second sentence merely restates the first sentence / the title / the target audience.
+- The summary tells the reader to do something (참조하세요, 사용하세요) instead of describing the change.
+- The title is a full sentence (ends with 합니다/됩니다/다.) or contains an acronym that does not appear in the English source.
 - The regions field uses made-up shorthand or mixes inconsistent region naming styles.
 
 EDITING RULES:
@@ -871,6 +889,60 @@ function koreanTitleLooksHallucinated(title, summary) {
   );
 }
 
+function splitKoreanSentences(text) {
+  return String(text || '')
+    .replace(/(\d)\.(\d)/g, '$1·$2')
+    .split(/(?<=[.!?。])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function contentTokens(text) {
+  return new Set(
+    String(text || '')
+      .replace(/(\d)\.(\d)/g, '$1·$2')
+      .split(/[^가-힣A-Za-z0-9·]+/)
+      .map((t) => t.replace(/(을|를|이|가|은|는|과|와|의|에|에서|으로|로|도|만|에게|부터|까지)$/, ''))
+      .filter((t) => t.length >= 2),
+  );
+}
+
+// Second sentence that only re-says the first sentence, the title, or the target audience.
+function koreanSecondSentenceIsRedundant(summary, title, target) {
+  const sentences = splitKoreanSentences(summary);
+  if (sentences.length < 2) return false;
+  const second = contentTokens(sentences[1]);
+  if (second.size < 3) return false;
+  const overlapRatio = (reference) => {
+    const ref = contentTokens(reference);
+    let hit = 0;
+    for (const t of second) if (ref.has(t)) hit++;
+    return hit / second.size;
+  };
+  return overlapRatio(sentences[0]) >= 0.7
+    || overlapRatio(target) >= 0.7
+    || overlapRatio(`${title} ${target}`) >= 0.8;
+}
+
+// Coined mixed-case acronyms (TLaD for "Trusted Launch as Default") that never appear in the English source.
+// All-caps tokens are deliberately not checked here — too many legitimate ones (MFA, GiB, CU) come from paraphrase.
+const ACRONYM_ALLOWLIST = new Set(['IPv4', 'IPv6', 'GiB', 'MiB', 'KiB', 'TiB', 'gRPC', 'vCPU', 'vTPM', 'vGPU', 'IoT', 'IaaS', 'PaaS', 'SaaS', 'FaaS', 'DaaS', 'GenAI', 'MoE', 'IaC', 'macOS', 'iOS', 'DevOps', 'MLOps', 'AIOps', 'GitOps', 'OpenAI', 'oneAPI', 'NVMe', 'eBPF', 'CCaaS', 'UCaaS', 'ScaNN', 'MacOS', 'ESXi', 'MySQL', 'NoSQL', 'MsSQL', 'TiDB']);
+function findInventedAcronyms(text, source) {
+  const src = String(source || '');
+  const seen = new Set();
+  const out = [];
+  for (const m of String(text || '').matchAll(/\b[A-Za-z]{3,5}\b/g)) {
+    const token = m[0];
+    if (seen.has(token)) continue;
+    seen.add(token);
+    if (!/[A-Z][a-z]+[A-Z]/.test(token)) continue;   // lowercase sandwiched between capitals: TLaD, ApNz — not ALLCAPS, not vLLM/OAuth
+    if (ACRONYM_ALLOWLIST.has(token)) continue;
+    if (src.toLowerCase().includes(token.toLowerCase())) continue;
+    out.push(token);
+  }
+  return out;
+}
+
 function countSentences(text) {
   return String(text || '')
     .replace(/(\d)\.(\d)/g, '$1·$2')
@@ -911,6 +983,12 @@ function applyDeterministicFixes(record, row, lang) {
   const stripMd = (s) => s.replace(/[*#`_~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
   title = stripMd(title);
   summary = stripMd(summary);
+
+  // Fix 1a: Known product-name misreads ("Amazon Connect customers" → invented "Amazon Connect Customer")
+  const fixProducts = (s) => s.replace(/Amazon Connect Customer(?!\s*Profiles)\b/g, 'Amazon Connect');
+  title = fixProducts(title);
+  summary = fixProducts(summary);
+  target = fixProducts(target);
 
   // Fix 1b: Strip status tags from title
   title = title.replace(/\s*\[?\b(?:Public Preview|Generally Available|Retirement|In preview|Launched|GA|Preview)\b\]?\s*[:：]?\s*/gi, ' ').replace(/\s+/g, ' ').trim();
@@ -1043,7 +1121,8 @@ function assessTranslationQuality(record, row, lang) {
   }
   
   if (summary.length < 30) reasons.push('summary-too-short');
-  if (countSentences(summary) !== 2) reasons.push('summary-not-two-sentences');
+  const sentenceCount = countSentences(summary);
+  if (lang === 'ko' ? (sentenceCount < 1 || sentenceCount > 2) : sentenceCount !== 2) reasons.push('summary-sentence-count');
   if (summary.slice(0, 24) === title.slice(0, 24)) reasons.push('summary-repeats-title');
   if (!target || target === 'all') reasons.push('target-too-generic');
   if (features.length < 2) reasons.push('features-too-thin');
@@ -1062,6 +1141,16 @@ function assessTranslationQuality(record, row, lang) {
     if (koreanTitleLooksHallucinated(title, summary)) {
       reasons.push('title-hallucinated');
     }
+    if (/(?:합니다|됩니다|습니다|[다요])\.?$/.test(title) || /\.$/.test(title)) {
+      reasons.push('title-is-sentence');
+    }
+    if (title.length > 55) reasons.push('title-too-long');
+    if (koreanSecondSentenceIsRedundant(summary, title, target)) reasons.push('summary-redundant');
+    if (/(?:^|\.\s+)(?:또한|이는|이를 통해)\s/.test(summary.replace(/^[^.]*\.\s+/, '. '))) reasons.push('summary-filler-connector');
+    if (/(?:하세요|하십시오|바랍니다|해 보세요|해보세요)[.!]?(?:\s|$)/.test(summary)) reasons.push('summary-imperative');
+    if (/[A-Za-z]{3,}(?:하거나|하여|합니다|되며|됩니다|했습니다|되었습니다|하는 |되는 )/.test(summary)) reasons.push('english-stem-korean-ending');
+    const invented = findInventedAcronyms(`${title} ${summary}`, `${row.title_en || ''} ${row.description_en || ''}`);
+    if (invented.length) reasons.push('invented-acronym');
   }
 
   // Status validation: beta/preview must have evidence in description
@@ -1117,6 +1206,8 @@ Korean fluency — fix these if present, using the English original as the sourc
 - Title still contains English verbs such as delivers, announces, now supports, or is truncated mid-word
 - Wrong particles after English names: Compute Engine를, Application Integration를, Amazon Bedrock와
 - Telegraphic noun strings missing 조사/어미, or calques like 연속 배달 instead of 지속적 배포
+- A second summary sentence that only restates the first sentence, the title, or the target audience — delete it or replace it with a concrete detail from the source
+- Reader instructions (참조하세요, 사용하세요), English stems with Korean endings (contributed하거나), or invented acronyms (TLaD)
 - Include "summary" in the output JSON when you rewrite it
 ` : '';
   
@@ -1280,11 +1371,25 @@ function getTranslationExecutionOptions(reason = 'backlog', extras = {}) {
   };
 }
 
+// GCP release notes carry section headings ("Feature", "Announcement", "Changed") on their own line;
+// left in, they leak into titles as "Cloud Load Balancing Feature For regional ...".
+function cleanSourceDescription(row) {
+  let desc = String(row.description_en || '');
+  if (row.csp === 'gcp') {
+    desc = desc
+      .replace(/(^|\n)\s*(?:Feature|Features|Announcement|Announcements|Change|Changed|Changes|Fixed|Fix|Fixes|Issue|Issues|Deprecated|Deprecation|Breaking change|Breaking changes|Libraries|Security)\s*:?\s*(?=\n|[A-Z])/g, '$1')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  }
+  return desc;
+}
+
 async function buildTranslationRecord(env, row, lang, hint = '', model = PRIMARY_MODEL) {
+  const sourceDescription = cleanSourceDescription(row);
   const titleForLLM = row.title_en.length < 20
-    ? `${row.title_en}: ${(row.description_en || '').slice(0, 100)}`
+    ? `${row.title_en}: ${sourceDescription.slice(0, 100)}`
     : row.title_en;
-  const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${(row.description_en || '').slice(0, 1500)}`;
+  const userMsg = `${buildVendorPromptHints(row)}\n\nTitle: ${titleForLLM}\nDescription: ${sourceDescription.slice(0, 1500)}`;
   
   const { sysPrompt, profile } = getTranslationPrompt(lang);
   const sysPromptWithHint = hint ? `${sysPrompt}\n\n=== 용어 사전 ===\n${hint}` : sysPrompt;
@@ -1605,7 +1710,14 @@ export default {
             if (r === 'title-not-translated') return isKo ? '제목을 한국어로 번역해야 함' : isJa ? 'タイトルを日本語に翻訳する必要があります' : 'Title must be translated';
             if (r === 'title-truncated') return isKo ? '제목이 잘리지 않게 완성해야 함' : isJa ? 'タイトルが途切れないように完成させてください' : 'Title must be completed without truncation';
             if (r === 'markdown-artifact') return isKo ? '마크다운 제거' : isJa ? 'マークダウン削除' : 'Remove markdown formatting';
-            if (r === 'summary-not-two-sentences') return isKo ? '요약은 정확히 2문장' : isJa ? '要約は正確に2文' : 'Summary must be exactly 2 sentences';
+            if (r === 'summary-sentence-count') return isKo ? '요약은 1~2문장. 새 정보가 없으면 1문장으로 끝낼 것' : isJa ? '要約は正確に2文' : 'Summary must be exactly 2 sentences';
+            if (r === 'summary-redundant') return '요약 두 번째 문장이 첫 문장·제목·대상을 반복함. 원문의 새 정보(활성화 방법, 제한, 리전, 버전)가 없으면 두 번째 문장을 삭제하고 1문장으로 쓸 것';
+            if (r === 'summary-filler-connector') return '요약에서 또한/이는/이를 통해로 이어 붙인 문장을 없애고 구체적 사실만 쓸 것';
+            if (r === 'summary-imperative') return '요약에 참조하세요/사용하세요 같은 독자 지시문을 쓰지 말고 변경 사실만 서술할 것';
+            if (r === 'english-stem-korean-ending') return '영어 단어에 한국어 어미를 붙이지 말 것 (contributed하거나 → 기여하거나). 동사는 한국어로 번역할 것';
+            if (r === 'invented-acronym') return '원문에 없는 약어를 만들지 말 것 (TLaD 금지). 제품·기능 이름은 원문 그대로 쓸 것';
+            if (r === 'title-is-sentence') return '제목은 명사구. 합니다/됩니다/마침표로 끝나는 문장을 제목으로 쓰지 말 것';
+            if (r === 'title-too-long') return '제목을 40자 이내로 줄일 것. 제품명 + 핵심 변경만 남길 것';
             if (r === 'target-too-generic') return isKo ? '대상을 구체적으로 작성' : isJa ? '対象を具体的に記述してください' : 'Target must be specific';
             if (r === 'summary-omits-subject') return '요약 첫 문장에 주어와 핵심 변화를 명시하고 이는/또한/이제로 시작하지 말 것';
             if (r === 'awkward-particle') return '영어 제품명 뒤 조사는 발음 받침 기준으로 고를 것 (Engine을, Bedrock과, Integration을)';
