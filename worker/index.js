@@ -1165,6 +1165,10 @@ function assessTranslationQuality(record, row, lang) {
     if (/(?:^|\.\s+)(?:또한|이는|이를 통해)\s/.test(summary.replace(/^[^.]*\.\s+/, '. '))) reasons.push('summary-filler-connector');
     if (/(?:하세요|하십시오|바랍니다|해 보세요|해보세요)[.!]?(?:\s|$)/.test(summary)) reasons.push('summary-imperative');
     if (/[A-Za-z]{3,}(?:하거나|하여|합니다|되며|됩니다|했습니다|되었습니다|하는 |되는 )/.test(summary)) reasons.push('english-stem-korean-ending');
+    // Untranslated English phrases (three or more lowercase words in a row) and Hangul glued to ALLCAPS fragments (비스파ARSITY).
+    if (/\b[a-z]{2,}(?:-[a-z]+)? [a-z]{2,} [a-z]{2,}\b/.test(summary) || /[가-힣][A-Z]{3,}/.test(`${title} ${summary}`)) {
+      reasons.push('untranslated-phrase');
+    }
     const invented = findInventedAcronyms(`${title} ${summary}`, `${row.title_en || ''} ${row.description_en || ''}`);
     if (invented.length) reasons.push('invented-acronym');
   }
@@ -1736,6 +1740,7 @@ export default {
             if (r === 'summary-filler-connector') return '요약에서 또한/이는/이를 통해로 이어 붙인 문장을 없애고 구체적 사실만 쓸 것';
             if (r === 'summary-imperative') return '요약에 참조하세요/사용하세요 같은 독자 지시문을 쓰지 말고 변경 사실만 서술할 것';
             if (r === 'english-stem-korean-ending') return '영어 단어에 한국어 어미를 붙이지 말 것 (contributed하거나 → 기여하거나). 동사는 한국어로 번역할 것';
+            if (r === 'untranslated-phrase') return '요약에 영어 구절을 남기지 말 것 (trillion-parameter foundation models → 조 단위 파라미터 기반 모델). 한글과 영어 대문자가 붙은 깨진 단어를 고칠 것';
             if (r === 'invented-acronym') return '원문에 없는 약어를 만들지 말 것 (TLaD 금지). 제품·기능 이름은 원문 그대로 쓸 것';
             if (r === 'title-is-sentence') return '제목은 명사구. 합니다/됩니다/마침표로 끝나는 문장을 제목으로 쓰지 말 것';
             if (r === 'title-too-long') return '제목을 40자 이내로 줄일 것. 제품명 + 핵심 변경만 남길 것';

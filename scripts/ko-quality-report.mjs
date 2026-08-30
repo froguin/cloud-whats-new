@@ -28,6 +28,7 @@ function checks(card) {
   if (/(?:하세요|하십시오|바랍니다|해 보세요|해보세요)[.!]?(?:\s|$)/.test(summary)) r.push('imperative');
   if (/[A-Za-z]{3,}(?:하거나|하여|합니다|되며|됩니다|했습니다|되었습니다|하는 |되는 )/.test(summary)) r.push('english-stem');
   if (/\b(delivers|announces|now supports|is now available)\b/i.test(title) || !/[가-힣]/.test(title)) r.push('title-not-translated');
+  if (/\b[a-z]{2,}(?:-[a-z]+)? [a-z]{2,} [a-z]{2,}\b/.test(summary) || /[가-힣][A-Z]{3,}/.test(`${title} ${summary}`)) r.push('untranslated-phrase');
   if (/Amazon Connect Customer(?!\s*Profiles)/.test(title + summary + target)) r.push('connect-customer');
   if (/ Feature (For|for) /.test(title + summary + target)) r.push('gcp-heading-leak');
   return r;
