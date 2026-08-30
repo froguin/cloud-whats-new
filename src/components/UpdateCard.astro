@@ -1,0 +1,153 @@
+---
+interface Props {
+  title: string; date: string; content: string; csp?: string;
+  target?: string; features?: string; regions?: string; status?: string;
+  originalLink?: string; index?: number; articleId?: number; isFallback?: boolean;
+}
+
+const { title, date, content, csp, target, features, regions, status, originalLink, index = 0, articleId, isFallback = false } = Astro.props;
+
+let statuses: string[] = [];
+try {
+  if (status) { const p = JSON.parse(status); statuses = Array.isArray(p) ? p.filter((s: string) => !s.includes(':')) : [status]; }
+} catch { statuses = status ? [status] : []; }
+
+const statusClass: Record<string, string> = {
+  '정식 출시': 'badge--ga', '미리보기': 'badge--preview', '베타': 'badge--beta', '지원 종료': 'badge--retired',
+};
+
+// GCP: Google 4-colour rotation (brand accent, kept on purpose)
+const gcpColors = ['#4285F4', '#EA4335', '#FBBC04', '#34A853'];
+const cardStyle = csp === 'gcp' ? `--gcp-accent:${gcpColors[index % 4]};` : undefined;
+
+const hasDetails = !!(target || features || regions);
+const rows = [
+  { key: 'target', label: '대상', value: target, icon: '<circle cx="8" cy="4" r="2.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>' },
+  { key: 'features', label: '기능', value: features, icon: '<path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z"/>' },
+  { key: 'regions', label: '리전', value: regions, icon: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1" fill="none"/><ellipse cx="8" cy="8" rx="3" ry="6" fill="none" stroke="currentColor" stroke-width="1"/>' },
+].filter(r => r.value);
+---
+
+<a href={originalLink || '#'} target="_blank" rel="noopener noreferrer"
+  id={`article-${articleId}`}
+  class={`update-card${isFallback ? ' card-fallback' : ''}`}
+  style={cardStyle}>
+  <div class="update-card__inner">
+    <div>
+      <div class="update-card__meta">
+        {isFallback && <span class="badge badge--fallback">번역 준비중</span>}
+        {statuses.map(s => <span class={`badge ${statusClass[s] || 'badge--other'}`}>{s}</span>)}
+        {date && <time class="update-card__date">{date}</time>}
+      </div>
+      <h3 class="update-card__title">{title}</h3>
+      <p class={`update-card__body${isFallback ? ' line-clamp-3' : ''}`}>{content}</p>
+    </div>
+    {hasDetails && (
+      <div class="kv">
+        {rows.map(r => (
+          <div class="kv__row">
+            <span class="kv__label">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" set:html={r.icon} />
+              {r.label}
+            </span>
+            <span class="kv__value">{r.value}</span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</a>
+
+<script>
+  document.addEventListener('astro:page-load', () => {
+    // Context menu: permalink copy (desktop right-click, mobile long-press)
+    const existingMenu = document.getElementById('card-ctx-menu');
+    if (existingMenu) existingMenu.remove();
+
+    const ctxMenu = document.createElement('div');
+    ctxMenu.id = 'card-ctx-menu';
+    ctxMenu.innerHTML = '<button id="ctx-copy-link">🔗 퍼머링크 복사</button><button id="ctx-copy-id">📋 ID 복사</button>';
+    ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:4px;min-width:140px;';
+    ctxMenu.querySelectorAll('button').forEach(b => b.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--color-text-primary);border-radius:4px;');
+    ctxMenu.querySelectorAll('button').forEach(b => { b.onmouseenter = () => b.style.background = 'var(--color-border)'; b.onmouseleave = () => b.style.background = 'none'; });
+    document.body.appendChild(ctxMenu);
+
+    let ctxTarget: { permalink: string; id: string } | null = null;
+
+    function showCtxMenu(x: number, y: number, permalink: string, id: string) {
+      ctxTarget = { permalink, id };
+      const mw = ctxMenu.offsetWidth || 160;
+      const mh = ctxMenu.offsetHeight || 80;
+      ctxMenu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
+      ctxMenu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+      ctxMenu.style.display = 'block';
+    }
+
+    function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxTarget = null; }
+
+    function showToast(msg: string) {
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:10000;opacity:0;transition:opacity .2s;';
+      document.body.appendChild(t);
+      requestAnimationFrame(() => t.style.opacity = '1');
+      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 200); }, 1500);
+    }
+
+    async function copyText(text: string, label: string) {
+      try { await navigator.clipboard.writeText(text); showToast(`${label} 복사됨`); }
+      catch { showToast('복사 실패'); }
+      hideCtxMenu();
+    }
+
+    document.getElementById('ctx-copy-link')!.onclick = () => ctxTarget && copyText(ctxTarget.permalink, '퍼머링크');
+    document.getElementById('ctx-copy-id')!.onclick = () => ctxTarget && copyText(ctxTarget.id, 'ID');
+    document.onclick = (e) => { if (!(e.target as Element).closest('#card-ctx-menu')) hideCtxMenu(); };
+
+    function getCardInfo(card: HTMLElement) {
+      const id = card.id?.replace('article-', '') || '';
+      const csp = window.location.pathname.replace('/', '') || 'aws';
+      const permalink = `${window.location.origin}/${csp}#${card.id}`;
+      return { id, permalink };
+    }
+
+    // Desktop: right-click
+    document.querySelectorAll<HTMLElement>('.update-card').forEach(card => {
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const info = getCardInfo(card);
+        showCtxMenu(e.clientX, e.clientY, info.permalink, info.id);
+      });
+    });
+
+    // Mobile: long-press (500ms) + first tap expands, second tap navigates
+    let longPressTimer: ReturnType<typeof setTimeout>;
+    if ('ontouchstart' in window) {
+      document.querySelectorAll<HTMLAnchorElement>('.update-card').forEach((card) => {
+        let expanded = false;
+        let longPressed = false;
+        card.addEventListener('touchstart', (e) => {
+          longPressed = false;
+          longPressTimer = setTimeout(() => {
+            longPressed = true;
+            const touch = e.touches[0];
+            const info = getCardInfo(card);
+            showCtxMenu(touch.clientX, touch.clientY, info.permalink, info.id);
+          }, 500);
+        }, { passive: true });
+        card.addEventListener('touchend', () => clearTimeout(longPressTimer));
+        card.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+        card.addEventListener('click', (e) => {
+          if (longPressed || ctxMenu.style.display === 'block') { hideCtxMenu(); e.preventDefault(); return; }
+          if (!expanded && card.classList.contains('card-fallback')) {
+            e.preventDefault();
+            card.querySelectorAll<HTMLElement>('.line-clamp-3').forEach((el) => {
+              el.style.webkitLineClamp = 'unset';
+            });
+            expanded = true;
+          }
+        });
+      });
+    }
+  });
+</script>

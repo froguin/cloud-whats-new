@@ -1,54 +1,25 @@
 /* Vendor brand fonts — required on every page, including the home page,
  * where all three CSP sections are rendered side by side. Do not move these
  * behind a per-vendor conditional import for performance: the home page must
- * ship AWS / Google Cloud / Azure brand faces. */
+ * ship AWS / Google Cloud / Azure brand faces.
+ * (Google Sans is loaded via <link> in Layout.astro — a CSS @import would
+ *  create a render-blocking request chain.) */
 @import "./segoe-ui.css";
-@import "./google-sans-text.css";
 @import "./amazon-ember.css";
 
-:root {
-  --status-ga-bg: rgba(22, 163, 74, 0.08);
-  --status-ga-text: #166534;
-  --status-ga-border: rgba(22, 163, 74, 0.2);
-  
-  --status-preview-bg: rgba(59, 130, 246, 0.08);
-  --status-preview-text: #1e40af;
-  --status-preview-border: rgba(59, 130, 246, 0.2);
-  
-  --status-beta-bg: rgba(168, 85, 247, 0.08);
-  --status-beta-text: #6b21a8;
-  --status-beta-border: rgba(168, 85, 247, 0.2);
-  
-  --status-retired-bg: rgba(239, 68, 68, 0.08);
-  --status-retired-text: #991b1b;
-  --status-retired-border: rgba(239, 68, 68, 0.2);
-
-  --status-fallback-bg: rgba(245, 158, 11, 0.08);
-  --status-fallback-text: #b45309;
-  --status-fallback-border: rgba(245, 158, 11, 0.2);
-}
-
-[data-theme="dark"] {
-  --status-ga-bg: rgba(74, 222, 128, 0.12);
-  --status-ga-text: #86efac;
-  --status-ga-border: rgba(74, 222, 128, 0.25);
-  
-  --status-preview-bg: rgba(96, 165, 250, 0.12);
-  --status-preview-text: #93c5fd;
-  --status-preview-border: rgba(96, 165, 250, 0.25);
-  
-  --status-beta-bg: rgba(192, 132, 252, 0.12);
-  --status-beta-text: #d8b4fe;
-  --status-beta-border: rgba(192, 132, 252, 0.25);
-  
-  --status-retired-bg: rgba(248, 113, 113, 0.12);
-  --status-retired-text: #fca5a5;
-  --status-retired-border: rgba(248, 113, 113, 0.25);
-
-  --status-fallback-bg: rgba(251, 191, 36, 0.12);
-  --status-fallback-text: #fde047;
-  --status-fallback-border: rgba(251, 191, 36, 0.25);
-}
+/* ============================================================
+   Token contract (every [data-vendor] must define all of these)
+   --color-*            palette
+   --font-family        body face
+   --font-weight-title  card title weight
+   --radius             container / hero radius
+   --card-radius, --chip-radius, --input-radius, --badge-radius, --btn-radius
+   --card-shadow, --card-hover-shadow, --card-border, --card-hover-border
+   --card-hover-bg, --card-active-bg     interaction state colours
+   --focus-ring, --focus-offset          outline shorthand for :focus-visible
+   --status-{ga,preview,beta,retired,fallback}-{bg,text,border}
+   --nav-active-bg, --nav-active-color   active top-nav item
+   ============================================================ */
 
 /* ============================================
    Home — neutral, hub feel
@@ -57,94 +28,182 @@
   --color-primary: #4F6CF7; --color-accent: #9B59F5;
   --color-bg: #F9FAFB; --color-surface: #FFFFFF; --color-border: #E4E7EC;
   --color-text-primary: #101828; --color-text-secondary: #667085;
-  --font-family: 'Pretendard Variable', 'Noto Sans KR', -apple-system, sans-serif;
+  --font-family: 'Pretendard Variable', -apple-system, 'Apple SD Gothic Neo', sans-serif;
   --font-weight-title: 700;
-  --radius: 12px; --nav-bg: #101828; --nav-height: 56px;
+  --radius: 12px; --card-radius: 12px; --chip-radius: 9999px; --input-radius: 12px; --badge-radius: 9999px; --btn-radius: 12px;
+  --nav-bg: #101828; --nav-height: 56px;
   --card-shadow: 0 1px 3px rgba(0,0,0,0.08); --card-hover-shadow: 0 8px 24px rgba(0,0,0,0.12);
   --card-border: 1px solid #E4E7EC;
   --card-hover-border: 1px solid #D0D5DD;
+  --card-hover-bg: #FFFFFF; --card-active-bg: #F9FAFB;
+  --focus-ring: 3px solid #4F6CF7; --focus-offset: 2px;
+  --nav-active-bg: #4F6CF7; --nav-active-color: #FFFFFF;
+
+  --status-ga-bg: rgba(22,163,74,.08);   --status-ga-text: #166534;      --status-ga-border: rgba(22,163,74,.25);
+  --status-preview-bg: rgba(59,130,246,.08); --status-preview-text: #1e40af; --status-preview-border: rgba(59,130,246,.25);
+  --status-beta-bg: rgba(168,85,247,.08); --status-beta-text: #6b21a8;   --status-beta-border: rgba(168,85,247,.25);
+  --status-retired-bg: rgba(239,68,68,.08); --status-retired-text: #991b1b; --status-retired-border: rgba(239,68,68,.25);
+  --status-fallback-bg: rgba(245,158,11,.08); --status-fallback-text: #b45309; --status-fallback-border: rgba(245,158,11,.25);
 }
 [data-vendor="home"][data-theme="dark"] {
   --color-primary: #7B93FF; --color-accent: #BB86FC;
   --color-bg: #0F1117; --color-surface: #1A1D27; --color-border: #2D3148;
   --color-text-primary: #F4F4F6; --color-text-secondary: #8B8FA8;
   --nav-bg: #0F1117; --card-border: 1px solid #2D3148; --card-hover-border: 1px solid #4B5078;
+  --card-hover-bg: #1A1D27; --card-active-bg: #1F2331;
+  --focus-ring: 3px solid #7B93FF;
+  --status-ga-bg: rgba(74,222,128,.12);  --status-ga-text: #86efac;  --status-ga-border: rgba(74,222,128,.3);
+  --status-preview-bg: rgba(96,165,250,.12); --status-preview-text: #93c5fd; --status-preview-border: rgba(96,165,250,.3);
+  --status-beta-bg: rgba(192,132,252,.12); --status-beta-text: #d8b4fe; --status-beta-border: rgba(192,132,252,.3);
+  --status-retired-bg: rgba(248,113,113,.12); --status-retired-text: #fca5a5; --status-retired-border: rgba(248,113,113,.3);
+  --status-fallback-bg: rgba(251,191,36,.12); --status-fallback-text: #fde047; --status-fallback-border: rgba(251,191,36,.3);
 }
 
 /* ============================================
-   AWS Cloudscape — operational, dense, bordered
-   Dark squid ink nav, orange accent, NO shadow on cards
+   AWS — Amazon Ember (aws.amazon.com) type + Cloudscape
+   semantics: dense, bordered, no card shadow. Status colours from
+   Cloudscape StatusIndicator, rendered as chips for site-wide consistency (success #037F0C / info #0972D3 / warning #8D6605 /
+   error #D91515 / inactive #5F6B7A), 2px blue focus ring.
    ============================================ */
 [data-vendor="aws"] {
   --color-primary: #0972D3; --color-accent: #FF9900;
   --color-bg: #F2F3F3; --color-surface: #FFFFFF; --color-border: #D5DBDB;
   --color-text-primary: #000716; --color-text-secondary: #5F6B7A;
-  --font-family: 'Amazon Ember', 'Noto Sans KR', sans-serif;
+  --font-family: 'Amazon Ember', 'Pretendard Variable', -apple-system, sans-serif;
   --font-weight-title: 700;
-  --radius: 8px; --nav-bg: #232F3E; --nav-height: 56px;
+  --radius: 8px; --card-radius: 8px; --chip-radius: 20px; --input-radius: 8px; --badge-radius: 4px; --btn-radius: 4px;
+  --nav-bg: #232F3E; --nav-height: 56px;
   --card-shadow: none; --card-hover-shadow: none;
   --card-border: 1px solid #D5DBDB;
-  --card-hover-border: 1px solid #879596;
+  --card-hover-border: 1px solid #0972D3;
+  --card-hover-bg: #F2F8FD; --card-active-bg: #E9F3FC;
+  --focus-ring: 2px solid #0972D3; --focus-offset: 2px;
+  --nav-active-bg: #FF9900; --nav-active-color: #16191F;
+
+  --status-ga-bg: #F2FCF3;       --status-ga-text: #037F0C;       --status-ga-border: #037F0C;
+  --status-preview-bg: #F2F8FD;  --status-preview-text: #0972D3;  --status-preview-border: #0972D3;
+  --status-beta-bg: #FFFCE6;     --status-beta-text: #8D6605;     --status-beta-border: #8D6605;
+  --status-retired-bg: #FFF7F7;  --status-retired-text: #D91515;  --status-retired-border: #D91515;
+  --status-fallback-bg: #F4F4F4; --status-fallback-text: #5F6B7A; --status-fallback-border: #8D99A8;
+  /* filled (active filter) variants */
+  --status-ga-fill: #037F0C; --status-preview-fill: #0972D3; --status-beta-fill: #8D6605; --status-retired-fill: #D91515; --status-fallback-fill: #5F6B7A;
 }
 [data-vendor="aws"][data-theme="dark"] {
   --color-primary: #539FE5; --color-accent: #FF9900;
   --color-bg: #16191f; --color-surface: #232730; --color-border: #303846;
   --color-text-primary: #eaeded; --color-text-secondary: #aab7c4;
   --nav-bg: #16191f; --card-border: 1px solid #303846; --card-hover-border: 1px solid #539FE5;
+  --card-hover-bg: #1E2A3C; --card-active-bg: #192B45;
+  --focus-ring: 2px solid #539FE5;
+  --status-ga-bg: rgba(41,173,50,.12);   --status-ga-text: #29AD32;   --status-ga-border: rgba(41,173,50,.5);
+  --status-preview-bg: rgba(83,159,229,.12); --status-preview-text: #539FE5; --status-preview-border: rgba(83,159,229,.5);
+  --status-beta-bg: rgba(224,202,87,.12); --status-beta-text: #E0CA57; --status-beta-border: rgba(224,202,87,.5);
+  --status-retired-bg: rgba(235,111,111,.12); --status-retired-text: #EB6F6F; --status-retired-border: rgba(235,111,111,.5);
+  --status-fallback-bg: rgba(141,153,168,.12); --status-fallback-text: #8D99A8; --status-fallback-border: rgba(141,153,168,.5);
+  --status-ga-fill: #29AD32; --status-preview-fill: #539FE5; --status-beta-fill: #E0CA57; --status-retired-fill: #EB6F6F; --status-fallback-fill: #8D99A8;
 }
 
 /* ============================================
-   GCP Material 3 — airy, rounded, floating shadows
-   White nav with Google 4-color accent, NO visible border on cards
-   Google Blue #4285F4, Red #EA4335, Yellow #FBBC04, Green #34A853
+   GCP — Material 3 with Google brand accents
+   Elevated card (12px, level-1 shadow, 4-colour top accent kept),
+   8px filter chips, pill search bar, tonal nav item, state-layer hover.
+   Status colours: Google extended palette.
    ============================================ */
 [data-vendor="gcp"] {
   --color-primary: #1A73E8; --color-accent: #34A853;
   --color-google-blue: #4285F4; --color-google-red: #EA4335;
   --color-google-yellow: #FBBC04; --color-google-green: #34A853;
-  --color-bg: #F8F9FA; --color-surface: #FFFFFF; --color-border: transparent;
+  --color-bg: #F8F9FA; --color-surface: #FFFFFF; --color-border: #DADCE0;
+  --color-surface-container: #F0F4F9; --color-surface-container-high: #E9EEF6;
+  --color-outline: #747775; --color-on-surface: #1F1F1F;
   --color-text-primary: #202124; --color-text-secondary: #5F6368;
-  --font-family: 'Google Sans', 'Roboto Flex', 'Noto Sans KR', sans-serif;
-  --font-weight-title: 700;
-  --radius: 12px; --nav-bg: #FFFFFF; --nav-height: 64px;
-  --card-shadow: 0 1px 2px rgba(60,64,67,0.15), 0 1px 3px 1px rgba(60,64,67,0.08);
-  --card-hover-shadow: 0 2px 6px 2px rgba(60,64,67,0.15), 0 1px 2px rgba(60,64,67,0.30);
-  --card-border: none;
-  --card-hover-border: none;
+  --font-family: 'Google Sans', 'Pretendard Variable', Roboto, -apple-system, sans-serif;
+  --font-weight-title: 500;
+  --radius: 12px; --card-radius: 12px; --chip-radius: 8px; --input-radius: 28px; --badge-radius: 8px; --btn-radius: 20px;
+  --nav-bg: #FFFFFF; --nav-height: 64px;
+  --card-shadow: 0 1px 2px rgba(60,64,67,0.30), 0 1px 3px 1px rgba(60,64,67,0.15);
+  --card-hover-shadow: 0 1px 2px rgba(60,64,67,0.30), 0 2px 6px 2px rgba(60,64,67,0.15);
+  --card-border: 1px solid transparent;
+  --card-hover-border: 1px solid transparent;
+  --card-hover-bg: color-mix(in srgb, #1F1F1F 8%, #FFFFFF);
+  --card-active-bg: color-mix(in srgb, #1F1F1F 12%, #FFFFFF);
+  --focus-ring: 2px solid #1A73E8; --focus-offset: 2px;
+  --nav-active-bg: #D3E3FD; --nav-active-color: #041E49;
+
+  --status-ga-bg: #E6F4EA;       --status-ga-text: #137333;       --status-ga-border: transparent;
+  --status-preview-bg: #E8F0FE;  --status-preview-text: #1967D2;  --status-preview-border: transparent;
+  --status-beta-bg: #F3E8FD;     --status-beta-text: #7627BB;     --status-beta-border: transparent;
+  --status-retired-bg: #FCE8E6;  --status-retired-text: #C5221F;  --status-retired-border: transparent;
+  --status-fallback-bg: #FEF7E0; --status-fallback-text: #B06000; --status-fallback-border: transparent;
 }
 [data-vendor="gcp"][data-theme="dark"] {
   --color-primary: #8AB4F8; --color-accent: #81C995;
   --color-google-blue: #8AB4F8; --color-google-red: #F28B82;
   --color-google-yellow: #FDD663; --color-google-green: #81C995;
-  --color-bg: #202124; --color-surface: #292A2D; --color-border: transparent;
+  --color-bg: #202124; --color-surface: #292A2D; --color-border: #3C4043;
+  --color-surface-container: #2D2E31; --color-surface-container-high: #333438;
+  --color-outline: #8E918F; --color-on-surface: #E3E3E3;
   --color-text-primary: #E8EAED; --color-text-secondary: #9AA0A6;
   --nav-bg: #292A2D;
   --card-shadow: 0 1px 3px rgba(0,0,0,0.4); --card-hover-shadow: 0 4px 12px rgba(0,0,0,0.5);
-  --card-border: none; --card-hover-border: none;
+  --card-hover-bg: color-mix(in srgb, #E3E3E3 8%, #292A2D);
+  --card-active-bg: color-mix(in srgb, #E3E3E3 12%, #292A2D);
+  --focus-ring: 2px solid #8AB4F8;
+  --nav-active-bg: #004A77; --nav-active-color: #C2E7FF;
+  --status-ga-bg: rgba(129,201,149,.14);  --status-ga-text: #81C995;
+  --status-preview-bg: rgba(138,180,248,.14); --status-preview-text: #8AB4F8;
+  --status-beta-bg: rgba(197,138,249,.14); --status-beta-text: #C58AF9;
+  --status-retired-bg: rgba(242,139,130,.14); --status-retired-text: #F28B82;
+  --status-fallback-bg: rgba(253,214,99,.14); --status-fallback-text: #FDD663;
 }
 
 /* ============================================
-   Azure Fluent UI 2 — compact, subtle depth, productivity
-   White nav with blue accent line, tight radius, shadow-based
+   Azure — Fluent 2
+   brand-80 #0F6CBD (hover #115EA3 / pressed #0C3B5E), 4px corners,
+   shadow4 → shadow8 on hover, bottom-line input, underlined Tab,
+   tint badges, 2px black focus stroke (white in dark).
+   3px brand top line on header kept as site identity.
    ============================================ */
 [data-vendor="azure"] {
-  --color-primary: #0078D4; --color-accent: #0F6CBD;
-  --color-bg: #FAF9F8; --color-surface: #FFFFFF; --color-border: #EDEBE9;
+  --color-primary: #0F6CBD; --color-accent: #0078D4;
+  --color-primary-hover: #115EA3; --color-primary-pressed: #0C3B5E;
+  --color-bg: #FAF9F8; --color-surface: #FFFFFF; --color-border: #E0E0E0;
+  --color-stroke-strong: #616161; --color-stroke: #D1D1D1;
   --color-text-primary: #242424; --color-text-secondary: #616161;
-  --font-family: 'Segoe UI Web', 'Segoe UI', 'Inter', 'Noto Sans KR', sans-serif;
+  --font-family: 'Segoe UI Variable Text', 'Segoe UI Web', 'Segoe UI', 'Pretendard Variable', -apple-system, sans-serif;
   --font-weight-title: 600;
-  --radius: 4px; --nav-bg: #FFFFFF; --nav-height: 48px;
+  --radius: 4px; --card-radius: 4px; --chip-radius: 4px; --input-radius: 4px; --badge-radius: 4px; --btn-radius: 4px;
+  --nav-bg: #FFFFFF; --nav-height: 48px;
   --card-shadow: 0 0 2px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.14);
-  --card-hover-shadow: 0 0 2px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.14);
-  --card-border: 1px solid #EDEBE9;
-  --card-hover-border: 1px solid #0078D4;
+  --card-hover-shadow: 0 0 2px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.14);
+  --card-border: 1px solid #E0E0E0;
+  --card-hover-border: 1px solid #D1D1D1;
+  --card-hover-bg: #F5F5F5; --card-active-bg: #E0E0E0;
+  --focus-ring: 2px solid #000000; --focus-offset: 1px;
+  --nav-active-bg: transparent; --nav-active-color: #242424;
+
+  --status-ga-bg: #F1FAF1;       --status-ga-text: #0E700E;       --status-ga-border: #9FD89F;
+  --status-preview-bg: #EBF3FC;  --status-preview-text: #0F548C;  --status-preview-border: #B4D6FA;
+  --status-beta-bg: #F1F0FD;     --status-beta-text: #5B5FC7;     --status-beta-border: #C5C2F5;
+  --status-retired-bg: #FDF3F4;  --status-retired-text: #B10E1C;  --status-retired-border: #EEACB2;
+  --status-fallback-bg: #FFF9F5; --status-fallback-text: #BC4B09; --status-fallback-border: #F4BFAB;
 }
 [data-vendor="azure"][data-theme="dark"] {
   --color-primary: #479EF5; --color-accent: #2886DE;
+  --color-primary-hover: #62ABF5; --color-primary-pressed: #96C6FA;
   --color-bg: #1B1A19; --color-surface: #292827; --color-border: #3B3A39;
+  --color-stroke-strong: #ADADAD; --color-stroke: #666666;
   --color-text-primary: #F3F2F1; --color-text-secondary: #A19F9D;
   --nav-bg: #292827;
-  --card-border: 1px solid #3B3A39; --card-hover-border: 1px solid #479EF5;
+  --card-border: 1px solid #3B3A39; --card-hover-border: 1px solid #4D4D4D;
+  --card-hover-bg: #383838; --card-active-bg: #2E2E2E;
+  --focus-ring: 2px solid #FFFFFF;
+  --nav-active-color: #F3F2F1;
+  --status-ga-bg: rgba(159,216,159,.12);  --status-ga-text: #9FD89F;  --status-ga-border: rgba(159,216,159,.4);
+  --status-preview-bg: rgba(119,183,247,.12); --status-preview-text: #77B7F7; --status-preview-border: rgba(119,183,247,.4);
+  --status-beta-bg: rgba(167,156,240,.12); --status-beta-text: #A79CF0; --status-beta-border: rgba(167,156,240,.4);
+  --status-retired-bg: rgba(238,172,178,.12); --status-retired-text: #EEACB2; --status-retired-border: rgba(238,172,178,.4);
+  --status-fallback-bg: rgba(244,191,171,.12); --status-fallback-text: #F4BFAB; --status-fallback-border: rgba(244,191,171,.4);
 }
 
 body {
@@ -159,17 +218,14 @@ header {
   z-index: 50;
   height: var(--nav-height);
   min-height: var(--nav-height);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background-color: color-mix(in srgb, var(--nav-bg) 85%, transparent) !important;
+  background-color: var(--nav-bg) !important;
   border-bottom: 1px solid var(--color-border);
-  transition: background-color 0.2s, border-color 0.2s;
   contain: layout style;
 }
 
-/* Nav accent details */
+/* Nav accent details (site identity — intentionally kept) */
 [data-vendor="azure"] header {
-  border-top: 3px solid #0078D4 !important;
+  border-top: 3px solid var(--color-primary) !important;
 }
 [data-vendor="gcp"] header {
   border-bottom: none !important;
@@ -182,22 +238,11 @@ header {
   border-bottom: none !important;
 }
 
-/* Accessibility: focus-visible */
-a:focus-visible, button:focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Card hover animation defaults */
-.aws-card, .gcp-card, .azure-card {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
-  contain: layout style;
-}
-
-/* Card press feedback */
-.aws-card:active, .gcp-card:active, .azure-card:active {
-  transform: scale(0.98) !important;
+/* Accessibility: focus-visible, per-vendor ring */
+a:focus-visible, button:focus-visible, input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--btn-radius);
 }
 
 /* Home list hover */

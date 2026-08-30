@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import UpdateCardCloudscape from '../components/UpdateCardCloudscape.astro';
+import UpdateCard from '../components/UpdateCard.astro';
 
 const { csp } = Astro.params;
 const valid = ['aws', 'gcp', 'azure'];
@@ -49,6 +49,7 @@ function getArticleStatuses(a: any): string {
   } catch { return ''; }
 }
 
+const filterClass: Record<string, string> = { '정식 출시': 'ga', '미리보기': 'preview', '베타': 'beta', '지원 종료': 'retired', '번역 준비중': 'fallback' };
 const activeStatusFilters = [...STATUS_ORDER.filter(s => (statusCounts[s] || 0) > 0), ...(statusCounts['번역 준비중'] ? ['번역 준비중'] : [])];
 const categoryUrl = new URL(`/${csp}`, Astro.site).toString();
 const structuredData = [
@@ -101,54 +102,44 @@ const structuredData = [
   ogImageAlt={`${names[csp]} 공식 업데이트를 한국어로 요약한 What's New 한국어 요약 공유 이미지`}
   structuredData={structuredData}
 >
-  <div class="mb-6 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
-    style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); box-shadow: var(--card-shadow);">
-    <div class="flex flex-col gap-1.5">
-      <div class="flex items-center gap-2">
-        <span class="w-3 h-3 rounded-full animate-pulse" style={`background: var(--color-primary);`}></span>
-        <h1 class="text-lg sm:text-xl font-extrabold tracking-tight" style="color: var(--color-text-primary);">
-          {names[csp]} 업데이트
-        </h1>
-      </div>
-      <p class="text-xs sm:text-sm" style="color: var(--color-text-secondary);">
+  <div class="page-head">
+    <div class="page-head__text">
+      <h1 class="page-head__title">
+        <span class="page-head__dot" aria-hidden="true"></span>
+        {names[csp]} 업데이트<span class="page-head__counter">({articles.length})</span>
+      </h1>
+      <p class="page-head__desc">
         {names[csp]} <a href={rss.url} target="_blank" rel="noopener noreferrer" class="underline font-semibold hover:opacity-80" style="color: var(--color-primary);">공식 RSS 피드</a>를 실시간 기계번역 및 품질 필터링을 통해 전달합니다.
       </p>
-      {latest && (
-        <span class="text-[11px] font-medium" style="color: var(--color-text-secondary);">
-          최종 업데이트: {latest}
-        </span>
-      )}
+      {latest && <span class="page-head__meta">최종 업데이트: {latest}</span>}
     </div>
-    
-    <div class="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+    <div class="page-head__tools">
       {activeStatusFilters.length > 0 && (
-        <div class="flex flex-wrap gap-1.5" id="filter-bar">
+        <div class="page-head__filters" id="filter-bar">
           {activeStatusFilters.map(s => (
             <button
-              class="filter-btn text-xs px-3 py-1.5 rounded-full font-semibold border transition-all duration-200 active:scale-95"
+              class={`filter-btn filter-btn--${filterClass[s]}`}
               type="button"
               aria-pressed="false"
               data-filter={s}>
-              {s}<span class="ml-1.5 opacity-60 text-[10px]">{statusCounts[s]}</span>
+              {s}<span class="count">{statusCounts[s]}</span>
             </button>
           ))}
         </div>
       )}
-      <div class="relative w-full sm:w-60">
-        <svg class="absolute left-3 top-2.5 w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--color-text-secondary);">
+      <div class="page-head__search search">
+        <svg class="search__icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
         </svg>
-        <input type="text" id="search" placeholder="검색..."
-          class="w-full pl-9 pr-4 py-2 text-sm rounded outline-none transition-all duration-200"
-          style="border: 2px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); border-radius: var(--radius);" />
+        <input type="search" id="search" placeholder="검색..." aria-label="업데이트 검색" autocomplete="off" class="search__input" />
       </div>
     </div>
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-start" id="cards">
+  <div class="cards-grid" id="cards">
     {articles.map((a, i) => (
       <div class="card-wrapper" data-statuses={getArticleStatuses(a)}>
-        <UpdateCardCloudscape
+        <UpdateCard
           title={a.title} csp={a.csp} index={i}
           date={a.pub_date ? new Date(a.pub_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
           content={a.summary || ''} target={a.target} features={a.features}
@@ -202,40 +193,6 @@ const structuredData = [
     document.addEventListener('astro:page-load', initSearchFilters);
   </script>
 
-  <style>
-    /* ── 비활성: 글씨+테두리만, 배경 투명 ── */
-    .filter-btn[data-filter="정식 출시"]  { border-color:#16a34a; color:#166534; background:transparent; }
-    .filter-btn[data-filter="미리보기"]   { border-color:#3b82f6; color:#1e40af; background:transparent; }
-    .filter-btn[data-filter="베타"]       { border-color:#a855f7; color:#6b21a8; background:transparent; }
-    .filter-btn[data-filter="지원 종료"]  { border-color:#ef4444; color:#991b1b; background:transparent; }
-    .filter-btn[data-filter="번역 준비중"]{ border-color:#f59e0b; color:#92400e; background:transparent; }
-
-    /* ── 다크모드 비활성: 채도 높인 밝은 색 ── */
-    :global([data-theme="dark"]) .filter-btn[data-filter="정식 출시"]  { border-color:#4ade80; color:#4ade80; }
-    :global([data-theme="dark"]) .filter-btn[data-filter="미리보기"]   { border-color:#60a5fa; color:#60a5fa; }
-    :global([data-theme="dark"]) .filter-btn[data-filter="베타"]       { border-color:#c084fc; color:#c084fc; }
-    :global([data-theme="dark"]) .filter-btn[data-filter="지원 종료"]  { border-color:#f87171; color:#f87171; }
-    :global([data-theme="dark"]) .filter-btn[data-filter="번역 준비중"]{ border-color:#fbbf24; color:#fbbf24; }
-
-    /* ── 활성: 배경색 채움 ── */
-    .filter-btn.is-active[data-filter="정식 출시"]  { background:#dcfce7; color:#166534; border-color:#16a34a; font-weight:700; box-shadow:0 0 0 2px #16a34a; }
-    .filter-btn.is-active[data-filter="미리보기"]   { background:#dbeafe; color:#1e40af; border-color:#3b82f6; font-weight:700; box-shadow:0 0 0 2px #3b82f6; }
-    .filter-btn.is-active[data-filter="베타"]       { background:#f3e8ff; color:#6b21a8; border-color:#a855f7; font-weight:700; box-shadow:0 0 0 2px #a855f7; }
-    .filter-btn.is-active[data-filter="지원 종료"]  { background:#fee2e2; color:#991b1b; border-color:#ef4444; font-weight:700; box-shadow:0 0 0 2px #ef4444; }
-    .filter-btn.is-active[data-filter="번역 준비중"]{ background:#fef3c7; color:#92400e; border-color:#f59e0b; font-weight:700; box-shadow:0 0 0 2px #f59e0b; }
-
-    /* ── 다크모드 활성: 진한 배경 + 밝은 글씨 ── */
-    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="정식 출시"]  { background:#166534; color:#dcfce7; border-color:#4ade80; box-shadow:0 0 0 2px #4ade80; }
-    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="미리보기"]   { background:#1e3a8a; color:#dbeafe; border-color:#60a5fa; box-shadow:0 0 0 2px #60a5fa; }
-    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="베타"]       { background:#581c87; color:#f3e8ff; border-color:#c084fc; box-shadow:0 0 0 2px #c084fc; }
-    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="지원 종료"]  { background:#7f1d1d; color:#fee2e2; border-color:#f87171; box-shadow:0 0 0 2px #f87171; }
-    :global([data-theme="dark"]) .filter-btn.is-active[data-filter="번역 준비중"]{ background:#78350f; color:#fef3c7; border-color:#fbbf24; box-shadow:0 0 0 2px #fbbf24; }
-
-    #search:focus {
-      border-color: var(--color-primary) !important;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent), inset 0 2px 4px rgba(0,0,0,0.1) !important;
-    }
-  </style>
 </Layout>
 
 <script>
