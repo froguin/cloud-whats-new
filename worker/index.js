@@ -1704,7 +1704,7 @@ export default {
           ? 'API_KEY_RING is not configured'
           : 'Unauthorized';
         if (path === '/api/articles' && status === 401) {
-          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp (search_releases/get_release, format="source" for the vendor-original text).';
+          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp.';
         }
         return jsonResponse({ error: message }, { status }, headers);
       }
@@ -1879,23 +1879,21 @@ export default {
 
       if (rpc.method === 'tools/list') {
         return respond(rpc.id, { tools: [
-          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. format="summary" (default) returns localized digests and needs no auth. format="source" returns the vendor-original English text straight from ingestion, independent of translation status, and requires Authorization: Bearer <mcp token> — use it as the source of truth.', inputSchema: {
+          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
             type: 'object', properties: {
-              query: { type: 'string', description: 'Search keyword — matches whichever text is being returned (localized digest for format=summary, vendor English text for format=source)' },
+              query: { type: 'string', description: 'Search keyword — matches title and summary' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
-              format: { type: 'string', enum: ['summary', 'source'], description: '"summary" (default): localized digest, no auth needed. "source": vendor-original English text + URL, requires Authorization: Bearer <mcp token>.' },
-              lang: { type: 'string', enum: ['ko', 'en'], description: 'format=summary only: output language. ko (default) is always available; en returns real English summaries once that pipeline exists (not the raw source — use format=source for that). Ignored when format=source.' },
+              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language: ko (default) or en, when available.' },
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
               limit: { type: 'number', description: 'Max results (default: 50, or 10/day for date ranges, max 100)' },
             },
           }},
-          { name: 'get_release', description: 'Get a specific release note by article ID. format="summary" (default, no auth) returns the localized digest. format="source" (requires Authorization: Bearer <mcp token>) returns the vendor-original English text + official URL, independent of translation status — use this as the source of truth for doc updates.', inputSchema: {
+          { name: 'get_release', description: 'Get a specific release note by article ID.', inputSchema: {
             type: 'object', properties: {
               id: { type: 'number', description: 'Article ID' },
-              format: { type: 'string', enum: ['summary', 'source'], description: '"summary" (default): localized digest, no auth needed. "source": vendor-original English text + URL, requires Authorization: Bearer <mcp token>.' },
-              lang: { type: 'string', description: 'format=summary only: language (default "ko").' },
+              lang: { type: 'string', description: 'Language (default "ko").' },
             }, required: ['id'],
           }},
           { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
@@ -1908,7 +1906,7 @@ export default {
         if (name === 'search_releases') {
           const format = args?.format === 'source' ? 'source' : 'summary';
           if (format === 'source' && !authContext.ok) {
-            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <mcp token> (see README "인증"). Use format="summary" (default) for unauthenticated access.');
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <token>.');
           }
           const csp = args?.csp ? args.csp.toLowerCase() : null;
           const lang = args?.lang || 'ko';
@@ -2002,7 +2000,7 @@ export default {
         if (name === 'get_release') {
           const format = args?.format === 'source' ? 'source' : 'summary';
           if (format === 'source' && !authContext.ok) {
-            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <mcp token> (see README "인증"). Use format="summary" (default) for unauthenticated access.');
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <token>.');
           }
 
           if (format === 'source') {
@@ -2024,9 +2022,7 @@ export default {
              FROM localized_content lc JOIN articles a ON lc.article_id = a.id
              WHERE lc.article_id = ? AND lc.lang = ?${extraGuard}`
           ).bind(args.id, lang).first();
-          const text = row
-            ? JSON.stringify(row, null, 2)
-            : `Not found (no "${lang}" summary yet for article ${args.id}). Use format="source" (requires Authorization: Bearer <mcp token>) for the vendor-original English text regardless of translation status.`;
+          const text = row ? JSON.stringify(row, null, 2) : `Not found (no "${lang}" summary yet for article ${args.id}).`;
           return respond(rpc.id, { content: [{ type: 'text', text }] });
         }
 

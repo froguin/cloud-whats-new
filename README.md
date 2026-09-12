@@ -64,8 +64,8 @@ Cloudflare Pages (Astro SSR)
 
 | 도구 | 설명 |
 |------|------|
-| `search_releases` | 키워드·CSP·기간으로 릴리스 노트 검색. `format`: `summary`(기본, 무인증)/`source`(벤더 원문, 인증 필요) |
-| `get_release` | article ID로 개별 릴리스 노트 조회. `format`: `summary`(기본, 무인증)/`source`(벤더 원문, 인증 필요) |
+| `search_releases` | 키워드·CSP·기간으로 릴리스 노트 검색 (ko 요약, 다국어 확장 예정) |
+| `get_release` | article ID로 개별 릴리스 노트 조회 |
 | `get_stats` | 번역/검수 파이프라인 현황 |
 
 ### 인증
@@ -73,14 +73,7 @@ Cloudflare Pages (Astro SSR)
 - POST API는 `Authorization: Bearer <token>` 헤더 사용
 - `GET /api/articles`는 whats-new.kr 자체 SSR(`site` 타입 토큰)만 허용 — 프로그램/에이전트 접근은 `POST /mcp` 사용. 배포 전환기라 `SITE_API_ENFORCEMENT`가 `warn`(기본, 로그만)일 때는 아직 막지 않고, SSR 쪽이 토큰을 정상적으로 보내는 게 로그로 확인되면 `on`으로 전환
 - `retranslate` 계열은 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서만 처리
-
-### MCP 인증 (`format` 파라미터 기준)
-
-`/mcp` 자체는 인증 없이 열려 있습니다 (`initialize`/`tools/list`, `format="summary"` 호출). `search_releases`/`get_release`의 `format="source"`만 `API_KEY_RING`의 `type: "mcp"` 토큰(`Authorization: Bearer wnk_mcp_...`)을 요구합니다.
-
-- `format: "summary"` (기본값) — `localized_content`의 언어별 요약. `lang: "ko"`가 항상 가능하고, `en`/`ja` 등은 실제로 AI가 처리한(`translated_at IS NOT NULL`) 건만 노출됩니다. 인증 불필요.
-- `format: "source"` — `articles.title_en`/`description_en` + `url`(벤더 공식 페이지), 번역 파이프라인 상태와 무관하게 항상 존재. **cloudpick-docs처럼 SOT(영문 원문) 확인이 필요한 소비자는 이 모드만 사용**하고, `Authorization: Bearer <mcp 토큰>` 필요. 인증 없이 요청하면 `-32001` 에러.
-- 주의: `articles.description_en`은 벤더 RSS를 HTML 태그 제거 후 최대 2000자로 자른 것이라, 완전한 공식 텍스트의 최종 확인은 항상 응답에 포함되는 `url`로 해야 합니다.
+- `/mcp`는 요약 조회(기본 동작)엔 인증이 필요 없습니다
 
 ## 디자인 시스템
 
