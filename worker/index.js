@@ -2,7 +2,24 @@ const RSS_FEEDS = {
   aws: 'https://aws.amazon.com/about-aws/whats-new/recent/feed/',
   gcp: 'https://docs.cloud.google.com/feeds/gcp-release-notes.xml',
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
+  openai: 'https://openai.com/news/rss.xml',
+  oracle: 'https://docs.oracle.com/en-us/iaas/releasenotes/feed',
+  ibm: 'https://cloud.ibm.com/status/api/notifications/feed.rss',
 };
+
+// Ingestion-only vendors: raw text lands in `articles` (queryable via MCP
+// format="source") but never gets a ko/en/ja translation job or a website
+// page — no summary pipeline cost until/unless a page is actually built.
+const SOURCE_ONLY_CSPS = new Set(['openai', 'oracle', 'ibm']);
+
+// These vendors never get a ko row by design, so backlog/missing-translation
+// counts must exclude them or they'd inflate forever and misreport the real
+// translation queue health for aws/gcp/azure.
+function sourceOnlyCspExclusionSql(alias = 'a') {
+  if (SOURCE_ONLY_CSPS.size === 0) return '';
+  const list = [...SOURCE_ONLY_CSPS].map((csp) => `'${csp}'`).join(',');
+  return `AND ${alias}.csp NOT IN (${list})`;
+}
 
 const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
@@ -696,17 +713,22 @@ async function fetchRSS(env) {
 
     if (selectRes) {
       const isNew = insertRes.meta.changes > 0;
+      const sourceOnly = SOURCE_ONLY_CSPS.has(item.csp);
       if (isNew) {
         totalNew++;
-        jobs.push({ articleId: selectRes.id, lang: 'ko', reason: 'new' });
-        jobs.push({ articleId: selectRes.id, lang: 'en', reason: 'new' });
-        jobs.push({ articleId: selectRes.id, lang: 'ja', reason: 'new' });
+        if (!sourceOnly) {
+          jobs.push({ articleId: selectRes.id, lang: 'ko', reason: 'new' });
+          jobs.push({ articleId: selectRes.id, lang: 'en', reason: 'new' });
+          jobs.push({ articleId: selectRes.id, lang: 'ja', reason: 'new' });
+        }
       }
-      localizedInsertStatements.push(
-        env.DB.prepare(
-          'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
-        ).bind(selectRes.id, item.csp, 'en', item.url || '', item.pub_date, item.title, item.description || '', '')
-      );
+      if (!sourceOnly) {
+        localizedInsertStatements.push(
+          env.DB.prepare(
+            'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
+          ).bind(selectRes.id, item.csp, 'en', item.url || '', item.pub_date, item.title, item.description || '', '')
+        );
+      }
     }
   }
 
@@ -1412,6 +1434,7 @@ async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit 
       SELECT 1 FROM localized_content lc
       WHERE lc.article_id = a.id AND lc.lang = ?
     )
+    ${sourceOnlyCspExclusionSql('a')}
     ORDER BY a.created_at DESC
     LIMIT ?
   `).bind(lang, limit).all();
@@ -1427,6 +1450,7 @@ async function getMissingTranslationCount(env, lang = 'ko') {
       SELECT 1 FROM localized_content lc
       WHERE lc.article_id = a.id AND lc.lang = ?
     )
+    ${sourceOnlyCspExclusionSql('a')}
   `).bind(lang).first();
   return row?.missing || 0;
 }
@@ -1823,7 +1847,7 @@ export default {
       const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
-        env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+        env.DB.prepare(`SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
         env.DB.prepare('SELECT count(*) as count, reason FROM translation_job_state GROUP BY reason').all(),
         env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
         env.DB.prepare("SELECT count(*) as count FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first(),
@@ -2028,7 +2052,7 @@ export default {
 
         if (name === 'get_stats') {
           const [backlog, reviewed, queue] = await Promise.all([
-            env.DB.prepare('SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+            env.DB.prepare(`SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
             env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
             env.DB.prepare('SELECT count(*) as c, reason FROM translation_job_state GROUP BY reason').all(),
           ]);
