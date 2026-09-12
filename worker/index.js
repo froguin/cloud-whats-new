@@ -1675,8 +1675,12 @@ export default {
       isTrustedIpBypassEnabled(env) &&
       isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
-      // MCP always requires auth, independent of AUTH_ENFORCEMENT (README: "/mcp는 항상 인증 필수")
-      authMode = 'on';
+      // /mcp itself stays reachable without auth (summary/discovery calls).
+      // Only format="source" tool calls require a valid "mcp"-type token,
+      // checked per-call inside tools/call below against authContext, which
+      // is still computed unconditionally here so that check has something
+      // to read. 'warn' (not 'off') keeps the [auth] log line either way.
+      authMode = 'warn';
     } else if (path === '/api/articles' && request.method === 'GET') {
       // Website-only gate — staged rollout, defaults to 'warn' until SSR call sites confirm the token
       authMode = getSiteApiEnforcement(env);
@@ -1700,7 +1704,7 @@ export default {
           ? 'API_KEY_RING is not configured'
           : 'Unauthorized';
         if (path === '/api/articles' && status === 401) {
-          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp (search_releases, get_release, get_stats).';
+          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp (search_releases/get_release, format="source" for the vendor-original text).';
         }
         return jsonResponse({ error: message }, { status }, headers);
       }
@@ -1854,8 +1858,8 @@ export default {
     // MCP Server — JSON-RPC 2.0 over HTTP
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
-      // Auth is enforced above (authMode is forced 'on' for this path); this just
-      // reflects that result for clients/telemetry via X-Auth-Status.
+      // format="source" tool calls check authContext.ok themselves (see
+      // tools/call below); this just reflects it for telemetry/X-Auth-Status.
       const isAuthenticated = authContext.ok;
       const mcpHeaders = {
         'Content-Type': 'application/json',
@@ -1875,19 +1879,24 @@ export default {
 
       if (rpc.method === 'tools/list') {
         return respond(rpc.id, { tools: [
-          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
+          { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. format="summary" (default) returns localized digests and needs no auth. format="source" returns the vendor-original English text straight from ingestion, independent of translation status, and requires Authorization: Bearer <mcp token> — use it as the source of truth.', inputSchema: {
             type: 'object', properties: {
-              query: { type: 'string', description: 'Search keyword — matches Korean title and summary' },
+              query: { type: 'string', description: 'Search keyword — matches whichever text is being returned (localized digest for format=summary, vendor English text for format=source)' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
-              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language: ko (Korean, default) or en (English original). Search always uses Korean.' },
+              format: { type: 'string', enum: ['summary', 'source'], description: '"summary" (default): localized digest, no auth needed. "source": vendor-original English text + URL, requires Authorization: Bearer <mcp token>.' },
+              lang: { type: 'string', enum: ['ko', 'en'], description: 'format=summary only: output language. ko (default) is always available; en returns real English summaries once that pipeline exists (not the raw source — use format=source for that). Ignored when format=source.' },
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
               limit: { type: 'number', description: 'Max results (default: 50, or 10/day for date ranges, max 100)' },
             },
           }},
-          { name: 'get_release', description: 'Get a specific release note by article ID. Returns both Korean and English.', inputSchema: {
-            type: 'object', properties: { id: { type: 'number', description: 'Article ID' } }, required: ['id'],
+          { name: 'get_release', description: 'Get a specific release note by article ID. format="summary" (default, no auth) returns the localized digest. format="source" (requires Authorization: Bearer <mcp token>) returns the vendor-original English text + official URL, independent of translation status — use this as the source of truth for doc updates.', inputSchema: {
+            type: 'object', properties: {
+              id: { type: 'number', description: 'Article ID' },
+              format: { type: 'string', enum: ['summary', 'source'], description: '"summary" (default): localized digest, no auth needed. "source": vendor-original English text + URL, requires Authorization: Bearer <mcp token>.' },
+              lang: { type: 'string', description: 'format=summary only: language (default "ko").' },
+            }, required: ['id'],
           }},
           { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
         ]});
@@ -1897,24 +1906,29 @@ export default {
         const { name, arguments: args } = rpc.params || {};
 
         if (name === 'search_releases') {
+          const format = args?.format === 'source' ? 'source' : 'summary';
+          if (format === 'source' && !authContext.ok) {
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <mcp token> (see README "인증"). Use format="summary" (default) for unauthenticated access.');
+          }
           const csp = args?.csp ? args.csp.toLowerCase() : null;
           const lang = args?.lang || 'ko';
           const query = args?.query || '';
 
+          const dateCol = format === 'source' ? 'a.pub_date' : 'lc.pub_date';
           // Date range: start_date/end_date > days > default 30 days
           let dateFilter, dateParams;
           if (args?.start_date) {
             const startISO = args.start_date + 'T00:00:00.000Z';
-            dateFilter = `lc.pub_date >= ?`;
+            dateFilter = `${dateCol} >= ?`;
             dateParams = [startISO];
             if (args?.end_date) {
               const endISO = args.end_date + 'T23:59:59.999Z';
-              dateFilter += ` AND lc.pub_date <= ?`;
+              dateFilter += ` AND ${dateCol} <= ?`;
               dateParams.push(endISO);
             }
           } else {
             const days = args?.days || 30;
-            dateFilter = `lc.pub_date > datetime('now', ?)`;
+            dateFilter = `${dateCol} > datetime('now', ?)`;
             dateParams = [`-${days} days`];
           }
 
@@ -1930,22 +1944,39 @@ export default {
             limit = 50;
           }
 
-          let sql, params = [];
-          if (lang === 'en') {
-            sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+          let sql, params = [], tbl, searchCol;
+          if (format === 'source') {
+            // Vendor-original English text straight from ingestion (articles
+            // table) — independent of the translation pipeline/backlog, so
+            // freshly-ingested articles show up immediately. Auth checked above.
+            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as description, a.url, a.pub_date FROM articles a WHERE ${dateFilter}`;
             params = [...dateParams];
+            tbl = 'a';
+            searchCol = { title: 'a.title_en', text: 'a.description_en' };
+          } else if (lang === 'en') {
+            // Real English summaries only (lc.translated_at set by the AI
+            // pipeline). The raw seed row inserted at ingestion time (see
+            // fetchRSS) has translated_at NULL and doesn't count as a summary
+            // — use format="source" for the vendor-original text instead.
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'en' AND lc.translated_at IS NOT NULL AND ${dateFilter}`;
+            params = [...dateParams];
+            tbl = 'lc';
+            searchCol = { title: 'lc.title', text: 'lc.summary' };
           } else if (lang === 'ko') {
             // Korean — direct, no JOIN needed
             sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
+            tbl = 'lc';
+            searchCol = { title: 'lc.title', text: 'lc.summary' };
           } else {
             // ja, zh... — requested lang with ko fallback + original title/URL
             sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.title_en as original_title, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
             params = [lang, ...dateParams];
+            tbl = 'ko';
+            searchCol = { title: 'COALESCE(t.title, ko.title)', text: 'COALESCE(t.summary, ko.summary)' };
           }
-          const tbl = (lang !== 'en' && lang !== 'ko') ? 'ko' : 'lc';
           if (csp) { sql += ` AND ${tbl}.csp = ?`; params.push(csp); }
-          if (query) { sql += ` AND (${tbl}.title LIKE ? OR ${tbl}.summary LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
+          if (query) { sql += ` AND (${searchCol.title} LIKE ? OR ${searchCol.text} LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
           sql += ` ORDER BY ${tbl}.pub_date DESC LIMIT ?`;
           params.push(limit);
           try {
@@ -1969,8 +2000,34 @@ export default {
         }
 
         if (name === 'get_release') {
-          const row = await env.DB.prepare('SELECT lc.*, a.title_en, a.description_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.article_id = ? AND lc.lang = ?').bind(args.id, 'ko').first();
-          return respond(rpc.id, { content: [{ type: 'text', text: row ? JSON.stringify(row, null, 2) : 'Not found' }] });
+          const format = args?.format === 'source' ? 'source' : 'summary';
+          if (format === 'source' && !authContext.ok) {
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <mcp token> (see README "인증"). Use format="summary" (default) for unauthenticated access.');
+          }
+
+          if (format === 'source') {
+            // Vendor-original English text straight from ingestion — independent
+            // of translation status, so it works even before Korean review runs.
+            const row = await env.DB.prepare(
+              'SELECT id as article_id, csp, title_en as title, description_en as description, url, pub_date FROM articles WHERE id = ?'
+            ).bind(args.id).first();
+            return respond(rpc.id, { content: [{ type: 'text', text: row ? JSON.stringify(row, null, 2) : 'Not found' }] });
+          }
+
+          const lang = args?.lang || 'ko';
+          // format=summary only ever returns real digests: for lang='en' this
+          // requires translated_at (the raw ingestion-time seed row doesn't
+          // count — see fetchRSS / search_releases lang='en' for the same guard).
+          const extraGuard = lang === 'en' ? ' AND lc.translated_at IS NOT NULL' : '';
+          const row = await env.DB.prepare(
+            `SELECT lc.article_id, lc.csp, lc.lang, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.reviewed_at, a.title_en as original_title, a.url, lc.pub_date
+             FROM localized_content lc JOIN articles a ON lc.article_id = a.id
+             WHERE lc.article_id = ? AND lc.lang = ?${extraGuard}`
+          ).bind(args.id, lang).first();
+          const text = row
+            ? JSON.stringify(row, null, 2)
+            : `Not found (no "${lang}" summary yet for article ${args.id}). Use format="source" (requires Authorization: Bearer <mcp token>) for the vendor-original English text regardless of translation status.`;
+          return respond(rpc.id, { content: [{ type: 'text', text }] });
         }
 
         if (name === 'get_stats') {
