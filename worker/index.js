@@ -534,6 +534,22 @@ function getAuthMode(env) {
   return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
 }
 
+// Staged rollout switch for the /api/articles website-only gate, independent of
+// AUTH_ENFORCEMENT so it can sit in 'warn' (log only) until the site's own SSR
+// calls are confirmed to be sending the site token in production.
+function getSiteApiEnforcement(env) {
+  const mode = (env.SITE_API_ENFORCEMENT || 'warn').toLowerCase();
+  return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
+}
+
+// Which API_KEY_RING key `type` a path requires, beyond just "any valid token".
+// /api/pipeline keeps accepting any valid type (service/mcp/recovery), unchanged.
+function requiredKeyTypeForPath(path) {
+  if (path === '/mcp') return 'mcp';
+  if (path === '/api/articles') return 'site';
+  return null;
+}
+
 function isTrustedIpBypassEnabled(env) {
   return String(env.TRUSTED_IP_BYPASS || 'off').toLowerCase() === 'on';
 }
@@ -1650,8 +1666,8 @@ export default {
     }
 
     const isProtectedApi =
-      request.method === 'POST' &&
-      (path === '/api/pipeline' || path === '/mcp');
+      (request.method === 'POST' && (path === '/api/pipeline' || path === '/mcp')) ||
+      (request.method === 'GET' && path === '/api/articles');
     const requiresAdminIp = request.method === 'POST' && (path === '/api/pipeline');
     const trustedIpBypass =
       path === '/api/pipeline' &&
@@ -1659,9 +1675,11 @@ export default {
       isTrustedIpBypassEnabled(env) &&
       isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
-      // MCP: always allow access, but check auth for enriched responses
-      // authContext is checked inside tool handlers for content gating
-      authMode = 'off';
+      // MCP always requires auth, independent of AUTH_ENFORCEMENT (README: "/mcp는 항상 인증 필수")
+      authMode = 'on';
+    } else if (path === '/api/articles' && request.method === 'GET') {
+      // Website-only gate — staged rollout, defaults to 'warn' until SSR call sites confirm the token
+      authMode = getSiteApiEnforcement(env);
     }
 
     let authContext = { ok: false, reason: 'not_checked' };
@@ -1669,14 +1687,21 @@ export default {
       authContext = trustedIpBypass
         ? { ok: true, keyId: 'trusted-ip-bypass', keyType: 'ip' }
         : authenticateRequest(request, env);
+      const requiredType = requiredKeyTypeForPath(path);
+      if (authContext.ok && requiredType && authContext.keyType !== requiredType) {
+        authContext = { ok: false, reason: 'wrong_key_type' };
+      }
       if (authMode === 'warn' || authMode === 'on' || !authContext.ok) {
         logAuthResult(request, path, authContext, authMode);
       }
       if (authMode === 'on' && !authContext.ok) {
         const status = authContext.reason === 'missing_key_ring' ? 503 : 401;
-        const message = authContext.reason === 'missing_key_ring'
+        let message = authContext.reason === 'missing_key_ring'
           ? 'API_KEY_RING is not configured'
           : 'Unauthorized';
+        if (path === '/api/articles' && status === 401) {
+          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp (search_releases, get_release, get_stats).';
+        }
         return jsonResponse({ error: message }, { status }, headers);
       }
       if (requiresAdminIp && authContext.ok && !isAllowedAdminIp(request, env)) {
@@ -1829,8 +1854,9 @@ export default {
     // MCP Server — JSON-RPC 2.0 over HTTP
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
-      // Check auth for content gating (not for access control)
-      const isAuthenticated = true; // MCP is fully public
+      // Auth is enforced above (authMode is forced 'on' for this path); this just
+      // reflects that result for clients/telemetry via X-Auth-Status.
+      const isAuthenticated = authContext.ok;
       const mcpHeaders = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',

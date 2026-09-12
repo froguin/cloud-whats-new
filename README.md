@@ -50,7 +50,7 @@ Cloudflare Pages (Astro SSR)
 
 | 엔드포인트 | 설명 |
 |-----------|------|
-| `GET /api/articles` | 기사 조회 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
+| `GET /api/articles` | 기사 조회 — whats-new.kr SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
 | `GET /api/stats` | 번역/검수/큐 상태 모니터링 |
 | `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 |
 | `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리) |
@@ -71,7 +71,8 @@ Cloudflare Pages (Astro SSR)
 ### 인증
 
 - POST API와 MCP는 `Authorization: Bearer <token>` 헤더 사용
-- `/mcp`는 항상 인증 필수
+- `/mcp`는 항상 인증 필수 (`API_KEY_RING`의 `type: "mcp"` 토큰만 허용, `AUTH_ENFORCEMENT`와 무관)
+- `GET /api/articles`는 whats-new.kr 자체 SSR(`site` 타입 토큰)만 허용 — 프로그램/에이전트 접근은 `POST /mcp` 사용. 배포 전환기라 `SITE_API_ENFORCEMENT`가 `warn`(기본, 로그만)일 때는 아직 막지 않고, SSR 쪽이 토큰을 정상적으로 보내는 게 로그로 확인되면 `on`으로 전환
 - `retranslate` 계열은 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서만 처리
 
 ## 디자인 시스템
@@ -114,15 +115,17 @@ GitHub Actions (`deploy.yml`, `push → main`):
 필요 시크릿: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
 운영 시 추가 시크릿:
-- `API_KEY_RING`: 서비스/MCP용 Bearer 토큰 목록 JSON
+- `API_KEY_RING`: 서비스/MCP/사이트용 Bearer 토큰 목록 JSON
+- Pages 프로젝트(`cloud-whats-new`)에 `SITE_API_TOKEN` (`wrangler pages secret put SITE_API_TOKEN`) — `API_KEY_RING`의 `type: "site"` 토큰과 같은 값. Astro SSR(`index.astro`, `[csp].astro`, `sitemap.xml.ts`)이 `/api/articles` 호출 시 이 값을 `Authorization: Bearer`로 보냄
 
-운영 변수: `AUTH_ENFORCEMENT`, `ALLOWED_ADMIN_IPS`, `BACKLOG_QUEUE_BATCH_SIZE`, `ALERT_WEBHOOK_URL`
+운영 변수: `AUTH_ENFORCEMENT`, `SITE_API_ENFORCEMENT`, `ALLOWED_ADMIN_IPS`, `BACKLOG_QUEUE_BATCH_SIZE`, `ALERT_WEBHOOK_URL`
 
 `API_KEY_RING` 예시:
 ```json
 [
   { "id": "service-current", "type": "service", "token": "wnk_srv_..." },
   { "id": "service-next", "type": "service", "token": "wnk_srv_..." },
-  { "id": "mcp-primary", "type": "mcp", "token": "wnk_mcp_..." }
+  { "id": "mcp-primary", "type": "mcp", "token": "wnk_mcp_..." },
+  { "id": "site-internal", "type": "site", "token": "wnk_site_..." }
 ]
 ```
