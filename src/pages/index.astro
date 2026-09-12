@@ -1,8 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { apiBase, apiHeaders } from '../lib/apiClient';
 
 const siteUrl = new URL(Astro.site);
-const API_BASE = `${siteUrl.protocol}//api.${siteUrl.host}`;
+const API_BASE = apiBase(siteUrl);
+const apiReqHeaders = apiHeaders(Astro.locals);
 
 const csps = [
   { id: 'aws', name: 'Amazon Web Services', color: '#FF9900', accent: '#232F3E', font: "'Amazon Ember', sans-serif" },
@@ -12,7 +14,7 @@ const csps = [
 
 const data: Record<string, any[]> = {};
 const results = await Promise.allSettled(
-  csps.map(c => fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=15`).then(r => r.json()))
+  csps.map(c => fetch(`${API_BASE}/api/articles?csp=${c.id}&lang=ko&limit=15`, { headers: apiReqHeaders }).then(r => r.json()))
 );
 csps.forEach((c, i) => {
   data[c.id] = results[i].status === 'fulfilled' ? results[i].value.items || [] : [];

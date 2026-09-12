@@ -2,7 +2,24 @@ const RSS_FEEDS = {
   aws: 'https://aws.amazon.com/about-aws/whats-new/recent/feed/',
   gcp: 'https://docs.cloud.google.com/feeds/gcp-release-notes.xml',
   azure: 'https://www.microsoft.com/releasecommunications/api/v2/azure/rss',
+  openai: 'https://openai.com/news/rss.xml',
+  oracle: 'https://docs.oracle.com/en-us/iaas/releasenotes/feed',
+  ibm: 'https://cloud.ibm.com/status/api/notifications/feed.rss',
 };
+
+// Ingestion-only vendors: raw text lands in `articles` (queryable via MCP
+// format="source") but never gets a ko/en/ja translation job or a website
+// page — no summary pipeline cost until/unless a page is actually built.
+const SOURCE_ONLY_CSPS = new Set(['openai', 'oracle', 'ibm']);
+
+// These vendors never get a ko row by design, so backlog/missing-translation
+// counts must exclude them or they'd inflate forever and misreport the real
+// translation queue health for aws/gcp/azure.
+function sourceOnlyCspExclusionSql(alias = 'a') {
+  if (SOURCE_ONLY_CSPS.size === 0) return '';
+  const list = [...SOURCE_ONLY_CSPS].map((csp) => `'${csp}'`).join(',');
+  return `AND ${alias}.csp NOT IN (${list})`;
+}
 
 const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
@@ -552,6 +569,22 @@ function getAuthMode(env) {
   return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
 }
 
+// Staged rollout switch for the /api/articles website-only gate, independent of
+// AUTH_ENFORCEMENT so it can sit in 'warn' (log only) until the site's own SSR
+// calls are confirmed to be sending the site token in production.
+function getSiteApiEnforcement(env) {
+  const mode = (env.SITE_API_ENFORCEMENT || 'warn').toLowerCase();
+  return ['off', 'warn', 'on'].includes(mode) ? mode : 'warn';
+}
+
+// Which API_KEY_RING key `type` a path requires, beyond just "any valid token".
+// /api/pipeline keeps accepting any valid type (service/mcp/recovery), unchanged.
+function requiredKeyTypeForPath(path) {
+  if (path === '/mcp') return 'mcp';
+  if (path === '/api/articles') return 'site';
+  return null;
+}
+
 function isTrustedIpBypassEnabled(env) {
   return String(env.TRUSTED_IP_BYPASS || 'off').toLowerCase() === 'on';
 }
@@ -698,17 +731,22 @@ async function fetchRSS(env) {
 
     if (selectRes) {
       const isNew = insertRes.meta.changes > 0;
+      const sourceOnly = SOURCE_ONLY_CSPS.has(item.csp);
       if (isNew) {
         totalNew++;
-        jobs.push({ articleId: selectRes.id, lang: 'ko', reason: 'new' });
-        jobs.push({ articleId: selectRes.id, lang: 'en', reason: 'new' });
-        jobs.push({ articleId: selectRes.id, lang: 'ja', reason: 'new' });
+        if (!sourceOnly) {
+          jobs.push({ articleId: selectRes.id, lang: 'ko', reason: 'new' });
+          jobs.push({ articleId: selectRes.id, lang: 'en', reason: 'new' });
+          jobs.push({ articleId: selectRes.id, lang: 'ja', reason: 'new' });
+        }
       }
-      localizedInsertStatements.push(
-        env.DB.prepare(
-          'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
-        ).bind(selectRes.id, item.csp, 'en', item.url || '', item.pub_date, item.title, item.description || '', '')
-      );
+      if (!sourceOnly) {
+        localizedInsertStatements.push(
+          env.DB.prepare(
+            'INSERT OR IGNORE INTO localized_content (article_id, csp, lang, url, pub_date, title, summary, status) VALUES (?,?,?,?,?,?,?,?)'
+          ).bind(selectRes.id, item.csp, 'en', item.url || '', item.pub_date, item.title, item.description || '', '')
+        );
+      }
     }
   }
 
@@ -1534,6 +1572,7 @@ async function enqueueMissingTranslations(env, lang = DEFAULT_QUEUE_LANG, limit 
       SELECT 1 FROM localized_content lc
       WHERE lc.article_id = a.id AND lc.lang = ?
     )
+    ${sourceOnlyCspExclusionSql('a')}
     ORDER BY a.created_at DESC
     LIMIT ?
   `).bind(lang, limit).all();
@@ -1549,6 +1588,7 @@ async function getMissingTranslationCount(env, lang = 'ko') {
       SELECT 1 FROM localized_content lc
       WHERE lc.article_id = a.id AND lc.lang = ?
     )
+    ${sourceOnlyCspExclusionSql('a')}
   `).bind(lang).first();
   return row?.missing || 0;
 }
@@ -1801,8 +1841,8 @@ export default {
     }
 
     const isProtectedApi =
-      request.method === 'POST' &&
-      (path === '/api/pipeline' || path === '/mcp');
+      (request.method === 'POST' && (path === '/api/pipeline' || path === '/mcp')) ||
+      (request.method === 'GET' && path === '/api/articles');
     const requiresAdminIp = request.method === 'POST' && (path === '/api/pipeline');
     const trustedIpBypass =
       path === '/api/pipeline' &&
@@ -1810,9 +1850,15 @@ export default {
       isTrustedIpBypassEnabled(env) &&
       isAllowedAdminIp(request, env);
     if (path === '/mcp' && request.method === 'POST') {
-      // MCP: always allow access, but check auth for enriched responses
-      // authContext is checked inside tool handlers for content gating
-      authMode = 'off';
+      // /mcp itself stays reachable without auth (summary/discovery calls).
+      // Only format="source" tool calls require a valid "mcp"-type token,
+      // checked per-call inside tools/call below against authContext, which
+      // is still computed unconditionally here so that check has something
+      // to read. 'warn' (not 'off') keeps the [auth] log line either way.
+      authMode = 'warn';
+    } else if (path === '/api/articles' && request.method === 'GET') {
+      // Website-only gate — staged rollout, defaults to 'warn' until SSR call sites confirm the token
+      authMode = getSiteApiEnforcement(env);
     }
 
     let authContext = { ok: false, reason: 'not_checked' };
@@ -1820,14 +1866,21 @@ export default {
       authContext = trustedIpBypass
         ? { ok: true, keyId: 'trusted-ip-bypass', keyType: 'ip' }
         : authenticateRequest(request, env);
+      const requiredType = requiredKeyTypeForPath(path);
+      if (authContext.ok && requiredType && authContext.keyType !== requiredType) {
+        authContext = { ok: false, reason: 'wrong_key_type' };
+      }
       if (authMode === 'warn' || authMode === 'on' || !authContext.ok) {
         logAuthResult(request, path, authContext, authMode);
       }
       if (authMode === 'on' && !authContext.ok) {
         const status = authContext.reason === 'missing_key_ring' ? 503 : 401;
-        const message = authContext.reason === 'missing_key_ring'
+        let message = authContext.reason === 'missing_key_ring'
           ? 'API_KEY_RING is not configured'
           : 'Unauthorized';
+        if (path === '/api/articles' && status === 401) {
+          message = 'This endpoint serves whats-new.kr only. For programmatic/agent access, use POST /mcp.';
+        }
         return jsonResponse({ error: message }, { status }, headers);
       }
       if (requiresAdminIp && authContext.ok && !isAllowedAdminIp(request, env)) {
@@ -1953,7 +2006,7 @@ export default {
       const [byLang, byModel, backlog, queue, reviewed, staleJobs, fluentRemaining, fluentToday] = await Promise.all([
         env.DB.prepare('SELECT csp, lang, count(*) as count FROM localized_content GROUP BY csp, lang').all(),
         env.DB.prepare('SELECT model_used, count(*) as count FROM localized_content WHERE lang = ? GROUP BY model_used ORDER BY count DESC').bind('ko').all(),
-        env.DB.prepare('SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+        env.DB.prepare(`SELECT count(*) as count FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
         env.DB.prepare('SELECT count(*) as count, reason FROM translation_job_state GROUP BY reason').all(),
         env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
         env.DB.prepare("SELECT count(*) as count FROM translation_job_state WHERE updated_at < datetime('now', '-10 minutes')").first(),
@@ -1988,8 +2041,9 @@ export default {
     // MCP Server — JSON-RPC 2.0 over HTTP
     if (path === '/mcp' && request.method === 'POST') {
       const rpc = await request.json();
-      // Check auth for content gating (not for access control)
-      const isAuthenticated = true; // MCP is fully public
+      // format="source" tool calls check authContext.ok themselves (see
+      // tools/call below); this just reflects it for telemetry/X-Auth-Status.
+      const isAuthenticated = authContext.ok;
       const mcpHeaders = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -2010,17 +2064,20 @@ export default {
         return respond(rpc.id, { tools: [
           { name: 'search_releases', description: 'Search cloud release notes by keyword, CSP, or date range. Supports Korean (ko) and English (en).', inputSchema: {
             type: 'object', properties: {
-              query: { type: 'string', description: 'Search keyword — matches Korean title and summary' },
+              query: { type: 'string', description: 'Search keyword — matches title and summary' },
               csp: { type: 'string', enum: ['aws', 'gcp', 'azure'], description: 'Cloud provider filter (lowercase)' },
-              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language: ko (Korean, default) or en (English original). Search always uses Korean.' },
+              lang: { type: 'string', enum: ['ko', 'en'], description: 'Output language: ko (default) or en, when available.' },
               days: { type: 'number', description: 'Look back N days from now (default 30). Ignored if start_date is set.' },
               start_date: { type: 'string', description: 'Start date (YYYY-MM-DD). Use with end_date for exact range.' },
               end_date: { type: 'string', description: 'End date (YYYY-MM-DD). Used with start_date.' },
               limit: { type: 'number', description: 'Max results (default: 50, or 10/day for date ranges, max 100)' },
             },
           }},
-          { name: 'get_release', description: 'Get a specific release note by article ID. Returns both Korean and English.', inputSchema: {
-            type: 'object', properties: { id: { type: 'number', description: 'Article ID' } }, required: ['id'],
+          { name: 'get_release', description: 'Get a specific release note by article ID.', inputSchema: {
+            type: 'object', properties: {
+              id: { type: 'number', description: 'Article ID' },
+              lang: { type: 'string', description: 'Language (default "ko").' },
+            }, required: ['id'],
           }},
           { name: 'get_stats', description: 'Get current translation/review pipeline status.', inputSchema: { type: 'object', properties: {} }},
         ]});
@@ -2030,24 +2087,29 @@ export default {
         const { name, arguments: args } = rpc.params || {};
 
         if (name === 'search_releases') {
+          const format = args?.format === 'source' ? 'source' : 'summary';
+          if (format === 'source' && !authContext.ok) {
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <token>.');
+          }
           const csp = args?.csp ? args.csp.toLowerCase() : null;
           const lang = args?.lang || 'ko';
           const query = args?.query || '';
 
+          const dateCol = format === 'source' ? 'a.pub_date' : 'lc.pub_date';
           // Date range: start_date/end_date > days > default 30 days
           let dateFilter, dateParams;
           if (args?.start_date) {
             const startISO = args.start_date + 'T00:00:00.000Z';
-            dateFilter = `lc.pub_date >= ?`;
+            dateFilter = `${dateCol} >= ?`;
             dateParams = [startISO];
             if (args?.end_date) {
               const endISO = args.end_date + 'T23:59:59.999Z';
-              dateFilter += ` AND lc.pub_date <= ?`;
+              dateFilter += ` AND ${dateCol} <= ?`;
               dateParams.push(endISO);
             }
           } else {
             const days = args?.days || 30;
-            dateFilter = `lc.pub_date > datetime('now', ?)`;
+            dateFilter = `${dateCol} > datetime('now', ?)`;
             dateParams = [`-${days} days`];
           }
 
@@ -2063,22 +2125,39 @@ export default {
             limit = 50;
           }
 
-          let sql, params = [];
-          if (lang === 'en') {
-            sql = `SELECT lc.article_id, lc.csp, a.title_en as title, a.description_en as summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
+          let sql, params = [], tbl, searchCol;
+          if (format === 'source') {
+            // Vendor-original English text straight from ingestion (articles
+            // table) — independent of the translation pipeline/backlog, so
+            // freshly-ingested articles show up immediately. Auth checked above.
+            sql = `SELECT a.id as article_id, a.csp, a.title_en as title, a.description_en as description, a.url, a.pub_date FROM articles a WHERE ${dateFilter}`;
             params = [...dateParams];
+            tbl = 'a';
+            searchCol = { title: 'a.title_en', text: 'a.description_en' };
+          } else if (lang === 'en') {
+            // Real English summaries only (lc.translated_at set by the AI
+            // pipeline). The raw seed row inserted at ingestion time (see
+            // fetchRSS) has translated_at NULL and doesn't count as a summary
+            // — use format="source" for the vendor-original text instead.
+            sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'en' AND lc.translated_at IS NOT NULL AND ${dateFilter}`;
+            params = [...dateParams];
+            tbl = 'lc';
+            searchCol = { title: 'lc.title', text: 'lc.summary' };
           } else if (lang === 'ko') {
             // Korean — direct, no JOIN needed
             sql = `SELECT lc.article_id, lc.csp, lc.title, lc.summary, a.title_en as original_title, a.url, lc.pub_date FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.lang = 'ko' AND ${dateFilter}`;
             params = [...dateParams];
+            tbl = 'lc';
+            searchCol = { title: 'lc.title', text: 'lc.summary' };
           } else {
             // ja, zh... — requested lang with ko fallback + original title/URL
             sql = `SELECT ko.article_id, ko.csp, COALESCE(t.title, ko.title) as title, COALESCE(t.summary, ko.summary) as summary, a.title_en as original_title, a.url, ko.pub_date FROM localized_content ko JOIN articles a ON ko.article_id = a.id LEFT JOIN localized_content t ON ko.article_id = t.article_id AND t.lang = ? WHERE ko.lang = 'ko' AND ${dateFilter.replace(/lc\./g, 'ko.')}`;
             params = [lang, ...dateParams];
+            tbl = 'ko';
+            searchCol = { title: 'COALESCE(t.title, ko.title)', text: 'COALESCE(t.summary, ko.summary)' };
           }
-          const tbl = (lang !== 'en' && lang !== 'ko') ? 'ko' : 'lc';
           if (csp) { sql += ` AND ${tbl}.csp = ?`; params.push(csp); }
-          if (query) { sql += ` AND (${tbl}.title LIKE ? OR ${tbl}.summary LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
+          if (query) { sql += ` AND (${searchCol.title} LIKE ? OR ${searchCol.text} LIKE ?)`; params.push(`%${query}%`, `%${query}%`); }
           sql += ` ORDER BY ${tbl}.pub_date DESC LIMIT ?`;
           params.push(limit);
           try {
@@ -2102,13 +2181,37 @@ export default {
         }
 
         if (name === 'get_release') {
-          const row = await env.DB.prepare('SELECT lc.*, a.title_en, a.description_en, a.url FROM localized_content lc JOIN articles a ON lc.article_id = a.id WHERE lc.article_id = ? AND lc.lang = ?').bind(args.id, 'ko').first();
-          return respond(rpc.id, { content: [{ type: 'text', text: row ? JSON.stringify(row, null, 2) : 'Not found' }] });
+          const format = args?.format === 'source' ? 'source' : 'summary';
+          if (format === 'source' && !authContext.ok) {
+            return error(rpc.id, -32001, 'format="source" requires Authorization: Bearer <token>.');
+          }
+
+          if (format === 'source') {
+            // Vendor-original English text straight from ingestion — independent
+            // of translation status, so it works even before Korean review runs.
+            const row = await env.DB.prepare(
+              'SELECT id as article_id, csp, title_en as title, description_en as description, url, pub_date FROM articles WHERE id = ?'
+            ).bind(args.id).first();
+            return respond(rpc.id, { content: [{ type: 'text', text: row ? JSON.stringify(row, null, 2) : 'Not found' }] });
+          }
+
+          const lang = args?.lang || 'ko';
+          // format=summary only ever returns real digests: for lang='en' this
+          // requires translated_at (the raw ingestion-time seed row doesn't
+          // count — see fetchRSS / search_releases lang='en' for the same guard).
+          const extraGuard = lang === 'en' ? ' AND lc.translated_at IS NOT NULL' : '';
+          const row = await env.DB.prepare(
+            `SELECT lc.article_id, lc.csp, lc.lang, lc.title, lc.summary, lc.target, lc.features, lc.regions, lc.status, lc.reviewed_at, a.title_en as original_title, a.url, lc.pub_date
+             FROM localized_content lc JOIN articles a ON lc.article_id = a.id
+             WHERE lc.article_id = ? AND lc.lang = ?${extraGuard}`
+          ).bind(args.id, lang).first();
+          const text = row ? JSON.stringify(row, null, 2) : `Not found (no "${lang}" summary yet for article ${args.id}).`;
+          return respond(rpc.id, { content: [{ type: 'text', text }] });
         }
 
         if (name === 'get_stats') {
           const [backlog, reviewed, queue] = await Promise.all([
-            env.DB.prepare('SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?)').bind('ko').first(),
+            env.DB.prepare(`SELECT count(*) as c FROM articles a WHERE NOT EXISTS (SELECT 1 FROM localized_content lc WHERE lc.article_id = a.id AND lc.lang = ?) ${sourceOnlyCspExclusionSql('a')}`).bind('ko').first(),
             env.DB.prepare('SELECT count(*) as total, sum(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) as reviewed FROM localized_content WHERE lang = ?').bind('ko').first(),
             env.DB.prepare('SELECT count(*) as c, reason FROM translation_job_state GROUP BY reason').all(),
           ]);
