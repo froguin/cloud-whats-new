@@ -40,6 +40,11 @@ AUTH_ENFORCEMENT = "on"
 SITE_API_ENFORCEMENT = "on"
 TRUSTED_IP_BYPASS = "on"
 ALLOWED_ADMIN_IPS = "211.207.226.107"
+# Translation model: switched from @cf/zai-org/glm-4.7-flash (a reasoning model
+# that burned ~3.4x the neurons on discarded reasoning tokens) to mistral-small.
+# Eval on 10 real articles: 24.1 vs 82.2 neurons/card at comparable Korean
+# quality. Remove this var to fall back to GLM. See scripts/model-eval.mjs.
+TRANSLATION_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct"
 
 
 [env.production.vars]
@@ -49,6 +54,7 @@ AUTH_ENFORCEMENT = "on"
 SITE_API_ENFORCEMENT = "on"
 TRUSTED_IP_BYPASS = "on"
 ALLOWED_ADMIN_IPS = "211.207.226.107"
+TRANSLATION_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct"
 
 routes = [
   { pattern = "api.whats-new.kr", custom_domain = true }
