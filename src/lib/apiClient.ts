@@ -3,6 +3,10 @@
 // tell our own server-side rendering apart from direct/agent calls to
 // /api/articles, which should go through POST /mcp instead. See worker/index.js
 // (requiredKeyTypeForPath, SITE_API_ENFORCEMENT) and README.md for the gate.
+//
+// The SITE_API_TOKEN Pages secret must match the "site"-type entry in the
+// Worker's API_KEY_RING; SSR only authenticates once this deployment ships
+// with the rotated token in place.
 
 export function apiBase(site: URL) {
   return `${site.protocol}//api.${site.host}`;
