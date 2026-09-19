@@ -50,30 +50,46 @@ Cloudflare Pages (Astro SSR)
 
 | 엔드포인트 | 설명 |
 |-----------|------|
+| `POST /mcp` | MCP JSON-RPC 2.0 엔드포인트 (기본 요약 조회는 공개, 영문 원문 조회는 에이전트 인증 필요) |
 | `GET /api/articles` | 기사 조회 — whats-new.kr SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
 | `GET /api/stats` | 번역/검수/큐 상태 모니터링 |
-| `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 |
-| `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리) |
-| `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 |
-| `POST /api/pipeline?action=retranslate&id=N` | 특정 기사 재번역 (`&mode=review`로 검수만, `&hint=...` 지원) |
-| `POST /api/pipeline?action=fix-bad` | 품질 미달 기사 일괄 재번역 |
-| `POST /api/pipeline?action=refresh-ko` | 어색한 한국어를 영문 원본 기준으로 재번역 (`limit` 최대 25, 기존 카드는 성공 시에만 덮어씀) |
-| `POST /mcp` | MCP JSON-RPC 엔드포인트 |
+| `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 (관리자 전용) |
+| `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리, 관리자 전용) |
+| `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 (관리자 전용) |
+| `POST /api/pipeline?action=retranslate&id=N` | 특정 기사 재번역 (`&mode=review`로 검수만, `&hint=...` 지원, 관리자 전용) |
+| `POST /api/pipeline?action=fix-bad` | 품질 미달 기사 일괄 재번역 (관리자 전용) |
+| `POST /api/pipeline?action=refresh-ko` | 어색한 한국어를 영문 원본 기준으로 재번역 (`limit` 최대 25, 관리자 전용) |
 
 ### MCP 도구
 
-| 도구 | 설명 |
-|------|------|
-| `search_releases` | 키워드·CSP·기간으로 릴리스 노트 검색 (ko 요약, 다국어 확장 예정) |
-| `get_release` | article ID로 개별 릴리스 노트 조회 |
-| `get_stats` | 번역/검수 파이프라인 현황 |
+`POST /mcp` 엔드포인트를 통해 JSON-RPC 2.0 프로토콜로 호출할 수 있는 도구 목록입니다. (`initialize`, `tools/list` 포함)
 
-### 인증
+| 도구 | 설명 | 주요 인자 |
+|------|------|----------|
+| `search_releases` | 키워드·CSP·기간으로 릴리스 노트 검색 (ko/en 요약 및 영문 원문 지원) | `query`, `csp`, `lang` (`ko`\|`en`), `days`, `start_date`, `end_date`, `limit`, `format` (`summary`\|`source`) |
+| `get_release` | article ID로 개별 릴리스 노트 조회 (ko/en 요약 및 영문 원문 지원) | `id` (필수), `lang` (`ko`\|`en`), `format` (`summary`\|`source`) |
+| `get_stats` | 번역/검수 파이프라인 현황 및 큐 상태 조회 | - |
 
-- POST API는 `Authorization: Bearer <token>` 헤더 사용
-- `GET /api/articles`는 whats-new.kr 자체 SSR(`site` 타입 토큰)만 허용 — 프로그램/에이전트 접근은 `POST /mcp` 사용. 배포 전환기라 `SITE_API_ENFORCEMENT`가 `warn`(기본, 로그만)일 때는 아직 막지 않고, SSR 쪽이 토큰을 정상적으로 보내는 게 로그로 확인되면 `on`으로 전환
-- `retranslate` 계열은 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서만 처리
-- `/mcp`는 요약 조회(기본 동작)엔 인증이 필요 없습니다
+- **요약 조회 (`format="summary"`, 기본값)**: 한국어(`ko`) 또는 영어(`en`) AI 요약 데이터를 반환하며, 별도 인증 없이 누구나 자유롭게 호출할 수 있습니다.
+- **영문 원문 조회 (`format="source"`)**: 벤더 영문 원문(수집된 `articles` 원본)을 반환합니다. `search_releases`와 `get_release` 둘 다 지원하며, 번역 파이프라인과 독립적이라 RSS 수집 직후 즉시 조회가 가능합니다. 단, 에이전트 전용 기능으로 `Authorization: Bearer <mcp 타입 토큰>` 인증이 필수이며, 미인증 시 JSON-RPC 에러 `-32001`로 거부됩니다.
+
+### API 접근 계층 및 인증
+
+API 접근은 보안 및 용도에 따라 4개 계층으로 구분됩니다.
+
+1. **공개 (인증 불필요)**: `POST /mcp`의 기본 요약 조회 (`search_releases`, `get_release`, `get_stats` 및 `initialize`, `tools/list`)
+   - 한국어·영어 AI 요약 및 시스템 통계를 인증 없이 조회할 수 있습니다.
+2. **에이전트 전용 (인증 필요)**: `POST /mcp`의 `format="source"` (영문 원문 조회)
+   - 벤더 영문 원문 데이터를 반환합니다.
+   - 요청 헤더에 `Authorization: Bearer <token>` (`mcp` 타입 토큰)이 필요하며, 토큰이 없거나 유효하지 않으면 JSON-RPC 에러 `-32001`을 반환합니다.
+   - 번역/검수 파이프라인과 독립적이므로 RSS 수집 직후 바로 확인할 수 있습니다.
+3. **사이트 SSR 전용**: `GET /api/articles`
+   - whats-new.kr 웹 프론트엔드의 서버사이드 렌더링(Astro SSR) 전용 엔드포인트입니다 (`site` 타입 토큰 필요).
+   - 일반 프로그램이나 AI 에이전트는 본 엔드포인트 대신 `POST /mcp`를 사용해야 합니다.
+   - `SITE_API_ENFORCEMENT` 환경변수로 차단 여부를 제어하며, 현재는 `on`으로 전환되어 유효한 `site` 토큰이 없는 요청은 401로 거부합니다 (신규 배포 롤아웃 시에는 `warn`으로 로그만 남기다가 SSR 인증이 확인되면 `on`으로 전환).
+4. **관리자 전용**: `POST /api/pipeline?action=...`
+   - RSS 수집 트리거, 백로그 큐잉, 기사 재번역 등 파이프라인 관리 API입니다.
+   - `Authorization: Bearer <token>` 헤더 인증과 함께 허용된 관리자 IP(`ALLOWED_ADMIN_IPS`)에서만 호출할 수 있습니다 (IP 불일치 시 403 Forbidden).
 
 ## 디자인 시스템
 
