@@ -28,6 +28,12 @@ const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v2';
 const OVERWRITE_TRANSLATION_REASONS = new Set(['fluent_refresh', 'quality_retry', 'manual']);
 const FLUENT_REFRESH_BATCH_SIZE = 4;
+// Default daily cap for the OPTIONAL fluent-Korean refresh pass (re-polishing
+// cards that already passed translation + AI review). This never gates new
+// article translation or the AI quality review — only how fast already-good
+// cards get further improved. Override at runtime with the
+// FLUENT_REFRESH_DAILY_CAP var/secret (see getFluentRefreshDailyCap) to throttle
+// Workers AI Neuron spikes without a redeploy; leave unset to keep this default.
 const FLUENT_REFRESH_DAILY_CAP = 100;
 
 // Adapted from https://github.com/snflkd/fluent-korean (fluent-korean-not-coding).
@@ -1613,6 +1619,16 @@ async function getFluentRefreshTodayCount(env) {
   return row?.count || 0;
 }
 
+// Runtime override for the optional fluent-refresh daily cap. Defaults to
+// FLUENT_REFRESH_DAILY_CAP (100) when the var is unset, so behavior is
+// unchanged unless an operator lowers it to throttle Neuron spikes. Only
+// affects the optional re-polish pass — never new translation or AI review.
+function getFluentRefreshDailyCap(env) {
+  const raw = parseInt(env?.FLUENT_REFRESH_DAILY_CAP ?? '', 10);
+  if (Number.isNaN(raw)) return FLUENT_REFRESH_DAILY_CAP;
+  return Math.max(0, Math.min(500, raw));
+}
+
 async function getFluentRefreshInFlightCount(env) {
   const row = await env.DB.prepare(`
     SELECT count(*) as count
@@ -1627,14 +1643,15 @@ async function getFluentRefreshBudget(env, requested) {
     getFluentRefreshTodayCount(env),
     getFluentRefreshInFlightCount(env),
   ]);
-  const remaining = Math.max(0, FLUENT_REFRESH_DAILY_CAP - today - inflight);
+  const cap = getFluentRefreshDailyCap(env);
+  const remaining = Math.max(0, cap - today - inflight);
   return Math.min(Math.max(0, requested), remaining);
 }
 
 async function enqueueFluentKoreanRefresh(env, limit = FLUENT_REFRESH_BATCH_SIZE) {
   const budget = await getFluentRefreshBudget(env, limit);
   if (budget <= 0) {
-    console.log(`Fluent Korean refresh skipped: daily cap ${FLUENT_REFRESH_DAILY_CAP} reached`);
+    console.log(`Fluent Korean refresh skipped: daily cap ${getFluentRefreshDailyCap(env)} reached`);
     return 0;
   }
   const rows = await env.DB.prepare(`
@@ -1995,7 +2012,7 @@ export default {
           queued,
           remaining,
           today,
-          cap: FLUENT_REFRESH_DAILY_CAP,
+          cap: getFluentRefreshDailyCap(env),
           reason: 'fluent_refresh',
         }, {}, headers);
       }
@@ -2033,7 +2050,7 @@ export default {
         fluent_korean: {
           remaining: fluentRemaining?.count || 0,
           today: fluentToday?.count || 0,
-          cap: FLUENT_REFRESH_DAILY_CAP,
+          cap: getFluentRefreshDailyCap(env),
           tag: FLUENT_KOREAN_MODEL_TAG,
         },
       }, {}, headers);
