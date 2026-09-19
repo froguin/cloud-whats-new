@@ -27,6 +27,12 @@ permissions:
   contents: read
   issues: write
 
+# Evaluation runs are infrequent (biweekly/manual); don't cancel an in-progress
+# run, just prevent two from overlapping.
+concurrency:
+  group: model-eval
+  cancel-in-progress: false
+
 jobs:
   evaluate:
     runs-on: ubuntu-latest
