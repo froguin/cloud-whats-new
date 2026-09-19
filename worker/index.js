@@ -1674,14 +1674,15 @@ export default {
     const backlogQueueBatchSize = getEnvInt(env, 'BACKLOG_QUEUE_BATCH_SIZE', 25);
     const minute = new Date().getMinutes();
 
-    // Every minute: queue backlog translations for all languages
-    let queued = 0;
-    for (const lang of ['ko', 'en', 'ja']) {
-      queued += await enqueueMissingTranslations(env, lang, backlogQueueBatchSize);
-    }
+    // New articles are enqueued for ko/en/ja the moment fetchRSS ingests them
+    // (see fetchRSS reason:'new'), and any that slip through are re-queued in
+    // the 15-min fetch block below. The previous per-minute backlog scan ran
+    // the `articles NOT EXISTS localized_content` full scan 3×/min even when
+    // backlog was 0 — ~86% of daily D1 rows_read. Backlog is now only swept on
+    // the 15-min fetch tick, keeping rows_read well under the free-tier cap.
 
-    // Every 5 min: if no backlog, queue pending reviews and Korean refreshes
-    if (minute % 5 === 0 && queued === 0) {
+    // Every 5 min: queue pending reviews and Korean refreshes
+    if (minute % 5 === 0) {
       for (const lang of ['ko', 'en', 'ja']) {
         const pending = await env.DB.prepare('SELECT a.id FROM articles a JOIN localized_content lc ON lc.article_id = a.id WHERE lc.lang = ? AND lc.reviewed_at IS NULL ORDER BY lc.created_at DESC LIMIT 10').bind(lang).all();
         if (pending.results.length > 0) {

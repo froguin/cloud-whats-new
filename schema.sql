@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS localized_content (
 CREATE INDEX IF NOT EXISTS idx_lc_lang_csp_date ON localized_content(lang, csp, pub_date DESC);
 CREATE INDEX IF NOT EXISTS idx_lc_lang_date ON localized_content(lang, pub_date DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_csp ON articles(csp);
+-- Backlog sweep (articles NOT EXISTS localized_content, filtered by csp,
+-- ordered by created_at DESC): lets the scan walk this index instead of the
+-- whole articles table. The NOT EXISTS subquery is already covered by
+-- localized_content's UNIQUE(article_id, lang) autoindex.
+CREATE INDEX IF NOT EXISTS idx_articles_csp_created ON articles(csp, created_at DESC);
+-- Pending-review sweep (localized_content by lang where reviewed_at IS NULL,
+-- ordered by created_at DESC).
+CREATE INDEX IF NOT EXISTS idx_lc_lang_reviewed_created ON localized_content(lang, reviewed_at, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS translation_job_state (
   article_id INTEGER NOT NULL,
