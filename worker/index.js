@@ -23,6 +23,20 @@ function sourceOnlyCspExclusionSql(alias = 'a') {
 
 const PRIMARY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const REVIEW_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+
+// Translation/review model IDs are runtime-overridable so a biweekly model
+// evaluation (see scripts/model-eval.mjs + .github/workflows/model-eval.yml)
+// can recommend a cheaper/better model and an operator can switch without a
+// redeploy. Defaults keep the current models when the vars are unset. Values
+// must be valid Workers AI text-generation model IDs; anything else falls back.
+function getTranslationModel(env) {
+  const m = String(env?.TRANSLATION_MODEL || '').trim();
+  return m.startsWith('@cf/') ? m : PRIMARY_MODEL;
+}
+function getReviewModel(env) {
+  const m = String(env?.REVIEW_MODEL || '').trim();
+  return m.startsWith('@cf/') ? m : REVIEW_MODEL;
+}
 // v2 (2026-08-30): 1–2 sentence summaries, no padding/restating, title/acronym/imperative checks.
 // Bumping this tag re-queues every Korean card through enqueueFluentKoreanRefresh (FLUENT_REFRESH_DAILY_CAP per day).
 const FLUENT_KOREAN_MODEL_TAG = 'glm-4.7-flash+fluent-korean-v2';
@@ -1298,7 +1312,7 @@ If you cannot find any real errors after thorough review, output: {"pass":true}`
 
   const reviewPromptWithHint = hint ? `${reviewPrompt}\n\n=== 추가 지시 ===\n${hint}` : reviewPrompt;
   try {
-    const aiResp = await env.AI.run(REVIEW_MODEL, {
+    const aiResp = await env.AI.run(getReviewModel(env), {
       messages: [{ role: 'system', content: reviewPromptWithHint }, { role: 'user', content: reviewInput }],
       max_tokens: lang === 'ko' ? 640 : 384, temperature: 0.1,
     });
@@ -1432,9 +1446,9 @@ async function hasLocalizedContent(env, articleId, lang) {
   return !!row?.found;
 }
 
-function getTranslationExecutionOptions(reason = 'backlog', extras = {}) {
+function getTranslationExecutionOptions(env, reason = 'backlog', extras = {}) {
   return {
-    model: PRIMARY_MODEL,
+    model: getTranslationModel(env),
     allowLowQuality: reason === 'quality_retry' && !extras.refresh,
   };
 }
@@ -1521,12 +1535,12 @@ async function runReviewPipeline(env, row, lang, hint = '') {
   const record = { title: existing.title, summary: existing.summary, target: existing.target, features: existing.features, regions: existing.regions, status: existing.status };
   const reviewed = await reviewTranslationQualityWithAI(env, row, record, lang, hint);
   const finalRecord = reviewed.reasons?.includes('reviewer-applied-edit') ? reviewed.record : record;
-  await persistTranslationRecord(env, row, finalRecord, lang, REVIEW_MODEL, { isReview: true });
+  await persistTranslationRecord(env, row, finalRecord, lang, getReviewModel(env), { isReview: true });
   return { ok: true };
 }
 
 async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint = '', extras = {}) {
-  const options = getTranslationExecutionOptions(reason, extras);
+  const options = getTranslationExecutionOptions(env, reason, extras);
   const record = await buildTranslationRecord(env, row, lang, hint, options.model);
   if (!record) {
     return { ok: false, needsRetry: false };
@@ -1555,7 +1569,7 @@ async function runTranslationPipeline(env, row, lang, reason = 'backlog', hint =
     row,
     finalRecord,
     lang,
-    lang === 'ko' ? FLUENT_KOREAN_MODEL_TAG : REVIEW_MODEL,
+    lang === 'ko' ? FLUENT_KOREAN_MODEL_TAG : getReviewModel(env),
     { isReview: true },
   );
   return { ok: true, quality };

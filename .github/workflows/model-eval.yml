@@ -1,0 +1,80 @@
+name: Translation model evaluation (biweekly)
+
+# Compares candidate Workers AI translation models against the fluent-korean
+# guideline (scripts/fluent-korean-reference.md) and Neuron cost, then opens a
+# GitHub issue with the report. It NEVER changes the live model — a human reads
+# the report and, if a candidate wins on quality AND cost, sets the
+# TRANSLATION_MODEL var/secret to switch (no redeploy needed).
+#
+# Schedule: the 1st and 15th of each month (~biweekly). Also run on demand.
+
+on:
+  schedule:
+    - cron: '0 0 1,15 * *'
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Comma-separated model IDs (optional; overrides defaults)'
+        required: false
+        type: string
+      samples:
+        description: 'Number of sample articles'
+        required: false
+        default: '9'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run model evaluation
+        id: eval
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Optional: set an MCP_TOKEN repo secret ("mcp"-type API_KEY_RING token)
+          # to evaluate on real vendor-original text instead of built-in fixtures.
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN }}
+          EVAL_MODELS: ${{ github.event.inputs.models }}
+          EVAL_SAMPLES: ${{ github.event.inputs.samples || '9' }}
+        run: |
+          node scripts/model-eval.mjs | tee eval-report.md
+
+      - name: Open issue with report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          {
+            echo "Biweekly automated evaluation of candidate translation models."
+            echo ""
+            echo "**Quality is the priority.** The report scores each model against the"
+            echo "fluent-korean guideline (\`scripts/fluent-korean-reference.md\`) and shows"
+            echo "Neuron cost. This is advisory only — nothing was changed automatically."
+            echo ""
+            echo "To switch the live model after reviewing:"
+            echo '```'
+            echo "# set the winning model (no redeploy needed):"
+            echo "npx wrangler secret put TRANSLATION_MODEL   # or add to wrangler.toml [vars]"
+            echo '```'
+            echo ""
+            echo "---"
+            echo ""
+            cat eval-report.md
+          } > issue-body.md
+          gh issue create \
+            --title "Translation model evaluation — $DATE" \
+            --body-file issue-body.md \
+            --label "model-eval" 2>&1 || {
+              echo "Label may not exist; retrying without label."
+              gh issue create --title "Translation model evaluation — $DATE" --body-file issue-body.md
+            }
