@@ -25,11 +25,16 @@ const API = process.env.API_BASE || 'https://api.whats-new.kr';
 const MCP_TOKEN = process.env.MCP_TOKEN || '';
 const SAMPLES = Number(process.env.EVAL_SAMPLES || 8);
 
-// Current production model first, then cheaper/newer non-reasoning candidates.
+// The model currently live in production (TRANSLATION_MODEL). The verdict below
+// only recommends switching AWAY from it when a candidate is at least as good
+// on fluent-korean quality AND cheaper. Defaults to the current production pick.
+const CURRENT_MODEL = process.env.CURRENT_MODEL || '@cf/mistralai/mistral-small-3.1-24b-instruct';
+
+// Candidate set: current model + cheaper/newer contenders to re-check biweekly.
 const DEFAULT_MODELS = [
-  '@cf/zai-org/glm-4.7-flash',              // current (reasoning; expensive output)
+  '@cf/mistralai/mistral-small-3.1-24b-instruct', // current
+  '@cf/zai-org/glm-4.7-flash',              // reasoning; expensive output tokens
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  '@cf/mistralai/mistral-small-3.1-24b-instruct',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/meta/llama-3.1-8b-instruct-fp8',
 ];
@@ -95,7 +100,7 @@ function scoreCard(card) {
   return flags;
 }
 
-async function aiRun(model, messages, maxTokens = 768) {
+async function aiRun(model, messages, maxTokens = Number(process.env.EVAL_MAX_TOKENS || 768)) {
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/${model}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
@@ -138,6 +143,14 @@ const FIXTURES = [
 ];
 
 async function loadSamples() {
+  // 1) explicit eval set file (most controlled/reproducible)
+  const file = process.env.EVAL_SET_FILE;
+  if (file) {
+    const { readFileSync } = await import('node:fs');
+    const arr = JSON.parse(readFileSync(file, 'utf8'));
+    return arr.slice(0, SAMPLES);
+  }
+  // 2) live vendor-original text via MCP (needs MCP_TOKEN)
   if (!MCP_TOKEN) return FIXTURES.slice(0, SAMPLES);
   const out = [];
   for (const csp of ['aws', 'gcp', 'azure']) {
@@ -195,6 +208,45 @@ async function main() {
     console.log(`| ${r.model} | ${r.neuronPer.toFixed(1)} | ${r.outTokPer.toFixed(0)} | ${r.flagged}/${r.n} | ${r.parseFail}/${r.n} | $${per1k} |`);
   }
 
+  // --- Verdict (advisory; quality gate first, then cost) ---------------------
+  // A candidate is eligible only if it is at least as good as the current model
+  // on fluent-korean adherence AND reliability (no worse flagged rate, no worse
+  // parse-fail rate). Among eligible candidates, the cheapest (fewest neurons)
+  // wins. This never switches the model — it only recommends.
+  const byModel = Object.fromEntries(results.map((r) => [r.model, r]));
+  const current = byModel[CURRENT_MODEL];
+  console.log('\n## Verdict\n');
+  console.log(`Current model: \`${CURRENT_MODEL}\``);
+  if (!current) {
+    console.log('> Current model was not in this run; add it to EVAL_MODELS for a comparison. No recommendation.');
+  } else {
+    const curFlagRate = current.flagged / current.n;
+    const curFailRate = current.parseFail / current.n;
+    const eligible = results.filter((r) =>
+      (r.flagged / r.n) <= curFlagRate + 1e-9 &&
+      (r.parseFail / r.n) <= curFailRate + 1e-9,
+    );
+    // cheapest eligible by neuron/card
+    eligible.sort((a, b) => a.neuronPer - b.neuronPer);
+    const winner = eligible[0];
+    if (!winner || winner.model === CURRENT_MODEL) {
+      console.log('**Recommendation: KEEP current model.** No candidate beats it on quality without costing more.');
+    } else {
+      const save = (1 - winner.neuronPer / current.neuronPer) * 100;
+      console.log(`**Recommendation: consider switching to \`${winner.model}\`.**`);
+      console.log(`- Quality: ${winner.flagged}/${winner.n} flagged vs current ${current.flagged}/${current.n} (candidate is no worse).`);
+      console.log(`- Cost: ${winner.neuronPer.toFixed(1)} vs ${current.neuronPer.toFixed(1)} neuron/card (~${save.toFixed(0)}% cheaper).`);
+      console.log('- **Quality is the priority — review the raw outputs below before switching.** To apply:');
+      console.log('  ```');
+      console.log(`  npx wrangler secret put TRANSLATION_MODEL   # value: ${winner.model}`);
+      console.log('  # or edit wrangler.toml [vars] TRANSLATION_MODEL and push');
+      console.log('  ```');
+      console.log('  Remove the var to fall back. Then watch scripts/ko-quality-report.mjs for a few days.');
+      // machine-readable marker for the workflow to flag the issue title
+      console.log(`\n<!-- SWITCH_RECOMMENDED:${winner.model} -->`);
+    }
+  }
+
   // Per-model samples for human review (quality is the priority)
   console.log('\n## Raw outputs for human review\n');
   for (const r of results) {
@@ -208,8 +260,8 @@ async function main() {
     console.log();
   }
 
-  console.log('> Deterministic flags catch guideline violations, but do NOT auto-switch the model.');
-  console.log('> A human reviews the raw outputs above, then sets TRANSLATION_MODEL if a candidate wins on both quality and cost.');
+  console.log('> Deterministic flags catch guideline violations but do NOT auto-switch the model.');
+  console.log('> The verdict above is advisory: a human reviews the raw outputs, then sets TRANSLATION_MODEL only if quality holds.');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

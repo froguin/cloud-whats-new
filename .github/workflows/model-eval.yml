@@ -53,6 +53,10 @@ jobs:
           EVAL_MODELS: ${{ github.event.inputs.models }}
           EVAL_SAMPLES: ${{ github.event.inputs.samples || '9' }}
         run: |
+          # The live model is the source of truth for the verdict's baseline.
+          CURRENT=$(grep -E '^TRANSLATION_MODEL' wrangler.toml | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+          if [ -n "$CURRENT" ]; then export CURRENT_MODEL="$CURRENT"; fi
+          echo "Baseline (current) model: ${CURRENT_MODEL:-<script default>}"
           node scripts/model-eval.mjs | tee eval-report.md
 
       - name: Open issue with report
@@ -60,6 +64,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           DATE=$(date -u +%Y-%m-%d)
+          # If the eval recommends switching, flag it in the issue title.
+          if grep -q 'SWITCH_RECOMMENDED:' eval-report.md; then
+            TITLE="⚠️ Translation model evaluation — $DATE (switch recommended)"
+          else
+            TITLE="Translation model evaluation — $DATE (keep current)"
+          fi
           {
             echo "Biweekly automated evaluation of candidate translation models."
             echo ""
@@ -67,20 +77,17 @@ jobs:
             echo "fluent-korean guideline (\`scripts/fluent-korean-reference.md\`) and shows"
             echo "Neuron cost. This is advisory only — nothing was changed automatically."
             echo ""
-            echo "To switch the live model after reviewing:"
-            echo '```'
-            echo "# set the winning model (no redeploy needed):"
-            echo "npx wrangler secret put TRANSLATION_MODEL   # or add to wrangler.toml [vars]"
-            echo '```'
+            echo "See the **Verdict** section below for the recommendation and the exact"
+            echo "command to switch \`TRANSLATION_MODEL\` if quality holds on review."
             echo ""
             echo "---"
             echo ""
             cat eval-report.md
           } > issue-body.md
           gh issue create \
-            --title "Translation model evaluation — $DATE" \
+            --title "$TITLE" \
             --body-file issue-body.md \
             --label "model-eval" 2>&1 || {
               echo "Label may not exist; retrying without label."
-              gh issue create --title "Translation model evaluation — $DATE" --body-file issue-body.md
+              gh issue create --title "$TITLE" --body-file issue-body.md
             }
