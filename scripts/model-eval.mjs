@@ -13,11 +13,18 @@
 // Usage:
 //   CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node scripts/model-eval.mjs
 // Optional env:
-//   EVAL_MODELS   comma-separated model IDs (default: candidate set below)
-//   EVAL_SAMPLES  number of source articles to pull (default 8)
-//   MCP_TOKEN     bearer token for POST /mcp format="source" (to pull real
-//                 vendor-original text); falls back to built-in fixtures.
-//   API_BASE      default https://api.whats-new.kr
+//   EVAL_MODELS      comma-separated model IDs (default: candidate set below)
+//   EVAL_SAMPLES     number of source articles to pull (default 8)
+//   EVAL_MAX_TOKENS  max_tokens per generation (default 4096). Must stay high
+//                    enough that verbose/reasoning models can finish their JSON
+//                    — truncation shows up as parse_fail and would disqualify a
+//                    model for a reason that has nothing to do with quality.
+//   MCP_TOKEN        bearer token for POST /mcp format="source" (to pull real
+//                    vendor-original text); falls back to built-in fixtures.
+//   CURRENT_MODEL    baseline override; normally resolved from the live
+//                    deployment via GET /api/stats (see resolveCurrentModel).
+//   CURRENT_MODEL_FALLBACK  used only if /api/stats is unreachable.
+//   API_BASE         default https://api.whats-new.kr
 
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN;
@@ -27,8 +34,34 @@ const SAMPLES = Number(process.env.EVAL_SAMPLES || 8);
 
 // The model currently live in production (TRANSLATION_MODEL). The verdict below
 // only recommends switching AWAY from it when a candidate is at least as good
-// on fluent-korean quality AND cheaper. Defaults to the current production pick.
-const CURRENT_MODEL = process.env.CURRENT_MODEL || '@cf/mistralai/mistral-small-3.1-24b-instruct';
+// on fluent-korean quality AND cheaper.
+//
+// The baseline must be what production is ACTUALLY running: TRANSLATION_MODEL
+// can be set as a Cloudflare var/secret without touching wrangler.toml, so
+// reading the repo file can compare against a model nobody is using. Resolution
+// order: explicit CURRENT_MODEL override -> live GET /api/stats (public) ->
+// CURRENT_MODEL_FALLBACK (wrangler.toml, passed by the workflow) -> built-in.
+const LAST_KNOWN_MODEL = '@cf/mistralai/mistral-small-3.1-24b-instruct';
+
+async function resolveCurrentModel() {
+  if (process.env.CURRENT_MODEL) {
+    return { model: process.env.CURRENT_MODEL, source: 'CURRENT_MODEL env override' };
+  }
+  try {
+    const res = await fetch(`${API}/api/stats`, { headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const live = (await res.json())?.models?.translation;
+      if (typeof live === 'string' && live.startsWith('@cf/')) {
+        return { model: live, source: `live deployment (${API}/api/stats)` };
+      }
+    }
+  } catch { /* fall through to the static fallbacks below */ }
+  const fallback = (process.env.CURRENT_MODEL_FALLBACK || '').trim();
+  if (fallback.startsWith('@cf/')) {
+    return { model: fallback, source: 'wrangler.toml (live value unavailable)' };
+  }
+  return { model: LAST_KNOWN_MODEL, source: 'built-in default (live value unavailable)' };
+}
 
 // Candidate set: current model + cheaper/newer contenders to re-check biweekly.
 const DEFAULT_MODELS = [
@@ -38,9 +71,10 @@ const DEFAULT_MODELS = [
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/meta/llama-3.1-8b-instruct-fp8',
 ];
-const MODELS = (process.env.EVAL_MODELS || '').trim()
+const MODELS_OVERRIDDEN = Boolean((process.env.EVAL_MODELS || '').trim());
+const MODELS = MODELS_OVERRIDDEN
   ? process.env.EVAL_MODELS.split(',').map((m) => m.trim()).filter(Boolean)
-  : DEFAULT_MODELS;
+  : [...DEFAULT_MODELS];
 
 // GLM-4.7-flash unit pricing (docs). Used only for a rough $ estimate; the
 // per-model neuron count from the API usage block is the primary signal.
@@ -100,7 +134,10 @@ function scoreCard(card) {
   return flags;
 }
 
-async function aiRun(model, messages, maxTokens = Number(process.env.EVAL_MAX_TOKENS || 768)) {
+// 4096, not a tight budget: reasoning models spend tokens before emitting JSON,
+// and a truncated response is indistinguishable from bad output in the parser.
+// The mistral-small switch was measured at this budget; keep them comparable.
+async function aiRun(model, messages, maxTokens = Number(process.env.EVAL_MAX_TOKENS || 4096)) {
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/${model}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
@@ -142,16 +179,27 @@ const FIXTURES = [
   { title: '[Preview] Azure Cosmos DB continuous backup for analytical store', description: 'Azure Cosmos DB now supports continuous backup and point-in-time restore for analytical store data. This feature is currently in public preview.' },
 ];
 
+// Returns { samples, source, degraded }. `degraded` marks a run that fell back
+// to the 3 built-in fixtures: the models then all summarize the same three
+// synthetic articles, which is enough for a smoke test but far too narrow to
+// justify switching the live model. The report says so loudly rather than
+// presenting those numbers as a verdict-grade comparison.
 async function loadSamples() {
   // 1) explicit eval set file (most controlled/reproducible)
   const file = process.env.EVAL_SET_FILE;
   if (file) {
     const { readFileSync } = await import('node:fs');
     const arr = JSON.parse(readFileSync(file, 'utf8'));
-    return arr.slice(0, SAMPLES);
+    return { samples: arr.slice(0, SAMPLES), source: `EVAL_SET_FILE (${file})`, degraded: false };
   }
   // 2) live vendor-original text via MCP (needs MCP_TOKEN)
-  if (!MCP_TOKEN) return FIXTURES.slice(0, SAMPLES);
+  if (!MCP_TOKEN) {
+    return {
+      samples: FIXTURES.slice(0, SAMPLES),
+      source: 'built-in fixtures (MCP_TOKEN not set)',
+      degraded: true,
+    };
+  }
   const out = [];
   for (const csp of ['aws', 'gcp', 'azure']) {
     try {
@@ -166,14 +214,33 @@ async function loadSamples() {
       for (const a of arr) out.push({ title: a.title, description: a.description });
     } catch { /* fall through to whatever we have */ }
   }
-  return (out.length ? out : FIXTURES).slice(0, SAMPLES);
+  if (!out.length) {
+    return {
+      samples: FIXTURES.slice(0, SAMPLES),
+      source: 'built-in fixtures (MCP fetch returned nothing)',
+      degraded: true,
+    };
+  }
+  return { samples: out.slice(0, SAMPLES), source: `live vendor originals via ${API}/mcp`, degraded: false };
 }
 
 async function main() {
-  const samples = await loadSamples();
+  const { samples, source: sampleSource, degraded } = await loadSamples();
+  const { model: CURRENT_MODEL, source: baselineSource } = await resolveCurrentModel();
+  const maxTokens = Number(process.env.EVAL_MAX_TOKENS || 4096);
+  // Without the baseline in the run there is nothing to compare against, so
+  // pull it in unless the caller pinned an explicit model list.
+  if (!MODELS_OVERRIDDEN && !MODELS.includes(CURRENT_MODEL)) MODELS.unshift(CURRENT_MODEL);
   console.log(`# Translation model evaluation — ${new Date().toISOString().slice(0, 16)}Z`);
-  console.log(`Samples: ${samples.length} | Models: ${MODELS.length}`);
+  console.log(`Samples: ${samples.length} (${sampleSource}) | Models: ${MODELS.length} | max_tokens: ${maxTokens}`);
+  console.log(`Baseline: \`${CURRENT_MODEL}\` — ${baselineSource}`);
   console.log(`Rubric: scripts/fluent-korean-reference.md (github.com/snflkd/fluent-korean)\n`);
+  if (degraded) {
+    console.log('> ⚠️ **Smoke-test run, not a decision-grade comparison.** No `MCP_TOKEN`,');
+    console.log(`> so every model summarized the same ${samples.length} built-in fixture article(s). Set the`);
+    console.log('> `MCP_TOKEN` repo secret (an `mcp`-type `API_KEY_RING` token) to evaluate on');
+    console.log('> real vendor originals before acting on any recommendation below.\n');
+  }
 
   const results = [];
   for (const model of MODELS) {
@@ -231,6 +298,13 @@ async function main() {
     const winner = eligible[0];
     if (!winner || winner.model === CURRENT_MODEL) {
       console.log('**Recommendation: KEEP current model.** No candidate beats it on quality without costing more.');
+    } else if (degraded) {
+      // A 3-fixture run can rank models, but it cannot carry a switch decision.
+      // Report the contender and stop short of the SWITCH_RECOMMENDED marker.
+      console.log(`**Recommendation: KEEP current model for now** — \`${winner.model}\` led this run`);
+      console.log(`(${winner.neuronPer.toFixed(1)} vs ${current.neuronPer.toFixed(1)} neuron/card, no worse on flags),`);
+      console.log('but this was a fixture-only smoke test. Set `MCP_TOKEN` and re-run on real');
+      console.log('articles (Actions → Translation model evaluation → Run workflow) before switching.');
     } else {
       const save = (1 - winner.neuronPer / current.neuronPer) * 100;
       console.log(`**Recommendation: consider switching to \`${winner.model}\`.**`);

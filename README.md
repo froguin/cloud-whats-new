@@ -52,7 +52,7 @@ Cloudflare Pages (Astro SSR)
 |-----------|------|
 | `POST /mcp` | MCP JSON-RPC 2.0 엔드포인트 (기본 요약 조회는 공개, 영문 원문 조회는 에이전트 인증 필요) |
 | `GET /api/articles` | 기사 조회 — whats-new.kr SSR 전용 (`csp`, `lang`, `limit` 파라미터, Accept-Language 자동 감지) |
-| `GET /api/stats` | 번역/검수/큐 상태 모니터링 |
+| `GET /api/stats` | 번역/검수/큐 상태 모니터링 (`models` 필드에 현재 가동 중인 번역/검수 모델 ID 포함) |
 | `POST /api/pipeline?action=fetch` | RSS 수집 및 신규 기사 큐잉 (관리자 전용) |
 | `POST /api/pipeline?action=translate` | 미번역 기사 일괄 큐잉 (백로그 처리, 관리자 전용) |
 | `POST /api/pipeline?action=review` | 미검수 기사 일괄 검수 큐잉 (관리자 전용) |
@@ -134,7 +134,7 @@ GitHub Actions (`deploy.yml`, `push → main`):
 - `API_KEY_RING`: 서비스/MCP/사이트용 Bearer 토큰 목록 JSON
 - Pages 프로젝트(`cloud-whats-new`)에 `SITE_API_TOKEN` (`wrangler pages secret put SITE_API_TOKEN`) — `API_KEY_RING`의 `type: "site"` 토큰과 같은 값. Astro SSR(`index.astro`, `[csp].astro`, `sitemap.xml.ts`)이 `/api/articles` 호출 시 이 값을 `Authorization: Bearer`로 보냄
 
-운영 변수: `AUTH_ENFORCEMENT`, `SITE_API_ENFORCEMENT`, `ALLOWED_ADMIN_IPS`, `BACKLOG_QUEUE_BATCH_SIZE`, `ALERT_WEBHOOK_URL`
+운영 변수: `AUTH_ENFORCEMENT`, `SITE_API_ENFORCEMENT`, `ALLOWED_ADMIN_IPS`, `BACKLOG_QUEUE_BATCH_SIZE`, `ALERT_WEBHOOK_URL`, `TRANSLATION_MODEL`, `REVIEW_MODEL`, `FLUENT_REFRESH_DAILY_CAP`
 
 `API_KEY_RING` 예시:
 ```json
@@ -145,3 +145,23 @@ GitHub Actions (`deploy.yml`, `push → main`):
   { "id": "site-internal", "type": "site", "token": "wnk_site_..." }
 ]
 ```
+
+### 번역 모델 자동 평가 (`model-eval.yml`)
+
+매월 **1일·15일 00:00 UTC**(09:00 KST)에 후보 모델들을 같은 번역 작업에 돌려
+fluent-korean 지침 위반 수와 Neuron 비용을 비교한 리포트를 발행합니다.
+`workflow_dispatch`로 즉시 실행할 수도 있습니다 (모델 목록·샘플 수 입력 가능).
+
+- **라이브 모델은 자동으로 바뀌지 않습니다.** 리포트는 권고일 뿐이고, 교체는 사람이
+  `TRANSLATION_MODEL`을 바꿔야 적용됩니다 (`wrangler.toml` [vars] 수정 후 push, 또는
+  `npx wrangler secret put TRANSLATION_MODEL` — 재배포 불필요). 변수를 지우면 롤백됩니다.
+- **승격 조건**: 후보가 현재 모델보다 위반 건수·JSON 파싱 실패율 모두 나쁘지 않아야 하고,
+  그중 Neuron이 가장 싼 모델이 추천됩니다. 비용 때문에 품질이 내려가지 않는 구조입니다.
+- **기준선**은 `GET /api/stats`의 `models.translation`(실제 가동 값)에서 읽습니다.
+  API가 닿지 않으면 `wrangler.toml` 값으로 폴백합니다.
+- **issue 정책**: 평소의 "keep current" 결과는 `Translation model evaluation — rolling log`
+  issue에 코멘트로 누적되고, **교체를 권고할 때만 별도 issue**가 열립니다.
+  rolling log issue는 닫지 마세요 (닫으면 다음 실행이 새로 만듭니다).
+- **선택 시크릿 `MCP_TOKEN`** (`API_KEY_RING`의 `mcp` 타입 토큰): 설정하면 실제 벤더 원문으로
+  평가합니다. **없으면 내장 fixture 3건으로만 돌아가며**, 이 경우 리포트 상단에 경고가 붙고
+  모델 교체를 권고하지 않습니다 (smoke test로만 취급).

@@ -2058,6 +2058,14 @@ export default {
       return jsonResponse({
         by_lang: byLang.results,
         by_model: byModel.results,
+        // Live model IDs actually in effect (var/secret override or built-in
+        // default). by_model above is historical (what each stored card was
+        // translated with); this is what the NEXT translation will use, and is
+        // the baseline scripts/model-eval.mjs compares candidates against.
+        models: {
+          translation: getTranslationModel(env),
+          review: getReviewModel(env),
+        },
         backlog: backlog?.count || 0,
         queue: { active: queue.results, stale: staleJobs?.count || 0 },
         review: { total: reviewed?.total || 0, reviewed: reviewed?.reviewed || 0, pending: (reviewed?.total || 0) - (reviewed?.reviewed || 0) },

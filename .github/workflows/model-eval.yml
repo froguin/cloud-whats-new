@@ -7,6 +7,11 @@ name: Translation model evaluation (biweekly)
 # TRANSLATION_MODEL var/secret to switch (no redeploy needed).
 #
 # Schedule: the 1st and 15th of each month (~biweekly). Also run on demand.
+#
+# Issue policy: routine "keep current" reports are appended as comments to a
+# single rolling-log issue so the tracker doesn't accumulate one issue per run.
+# Only a run that recommends a switch opens its own issue, because that is the
+# only outcome that needs a human decision.
 
 on:
   schedule:
@@ -52,42 +57,93 @@ jobs:
           MCP_TOKEN: ${{ secrets.MCP_TOKEN }}
           EVAL_MODELS: ${{ github.event.inputs.models }}
           EVAL_SAMPLES: ${{ github.event.inputs.samples || '9' }}
+          # Reasoning models spend tokens before emitting JSON; a tight budget
+          # truncates them into parse_fail and disqualifies them for a reason
+          # unrelated to Korean quality. Matches the budget the current model
+          # was chosen at, so runs stay comparable.
+          EVAL_MAX_TOKENS: '4096'
         run: |
-          # The live model is the source of truth for the verdict's baseline.
-          CURRENT=$(grep -E '^TRANSLATION_MODEL' wrangler.toml | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
-          if [ -n "$CURRENT" ]; then export CURRENT_MODEL="$CURRENT"; fi
-          echo "Baseline (current) model: ${CURRENT_MODEL:-<script default>}"
+          if [ -z "$MCP_TOKEN" ]; then
+            echo "::warning title=Fixture-only evaluation::MCP_TOKEN is not set, so the eval runs on 3 built-in fixture articles instead of real vendor originals. The report is a smoke test and will not recommend a model switch."
+          fi
+          # The verdict's baseline is whatever production is ACTUALLY running,
+          # which the script reads from GET /api/stats. TRANSLATION_MODEL can be
+          # set as a Cloudflare var/secret without touching wrangler.toml, so the
+          # repo file is only a fallback for when the API is unreachable.
+          FALLBACK=$(grep -E '^TRANSLATION_MODEL' wrangler.toml | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+          if [ -n "$FALLBACK" ]; then export CURRENT_MODEL_FALLBACK="$FALLBACK"; fi
+          echo "Baseline fallback (wrangler.toml): ${CURRENT_MODEL_FALLBACK:-<script default>}"
           node scripts/model-eval.mjs | tee eval-report.md
 
-      - name: Open issue with report
+      - name: Publish report (rolling log, or a new issue if a switch is advised)
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TRACKER_TITLE: Translation model evaluation — rolling log
         run: |
+          set -euo pipefail
           DATE=$(date -u +%Y-%m-%d)
-          # If the eval recommends switching, flag it in the issue title.
-          if grep -q 'SWITCH_RECOMMENDED:' eval-report.md; then
-            TITLE="⚠️ Translation model evaluation — $DATE (switch recommended)"
-          else
-            TITLE="Translation model evaluation — $DATE (keep current)"
-          fi
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
           {
-            echo "Biweekly automated evaluation of candidate translation models."
+            echo "Automated evaluation of candidate translation models."
             echo ""
             echo "**Quality is the priority.** The report scores each model against the"
             echo "fluent-korean guideline (\`scripts/fluent-korean-reference.md\`) and shows"
             echo "Neuron cost. This is advisory only — nothing was changed automatically."
             echo ""
-            echo "See the **Verdict** section below for the recommendation and the exact"
-            echo "command to switch \`TRANSLATION_MODEL\` if quality holds on review."
+            echo "See the **Verdict** section for the recommendation and the exact command"
+            echo "to switch \`TRANSLATION_MODEL\` if quality holds on review."
+            echo ""
+            echo "Run: $RUN_URL"
             echo ""
             echo "---"
             echo ""
             cat eval-report.md
-          } > issue-body.md
-          gh issue create \
-            --title "$TITLE" \
-            --body-file issue-body.md \
-            --label "model-eval" 2>&1 || {
-              echo "Label may not exist; retrying without label."
-              gh issue create --title "$TITLE" --body-file issue-body.md
-            }
+          } > report.md
+
+          # Make sure the label exists so the create calls below can rely on it.
+          gh label create model-eval --color "0E8A16" \
+            --description "Automated translation-model evaluation reports" 2>/dev/null || true
+
+          if grep -q 'SWITCH_RECOMMENDED:' eval-report.md; then
+            # Needs a human decision — give it its own issue so it is not buried
+            # in the rolling log.
+            gh issue create \
+              --title "⚠️ Translation model evaluation — $DATE (switch recommended)" \
+              --body-file report.md \
+              --label "model-eval"
+            exit 0
+          fi
+
+          # Routine "keep current" result: append to the single rolling-log issue
+          # instead of opening a new one every run.
+          TRACKER=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$TRACKER_TITLE\") | .number] | first // empty")
+
+          if [ -z "$TRACKER" ]; then
+            {
+              echo "Rolling log of the automated translation-model evaluation"
+              echo "(\`.github/workflows/model-eval.yml\`, 1st and 15th of each month)."
+              echo ""
+              echo "Routine **keep current** results are appended here as comments."
+              echo "A run that recommends switching \`TRANSLATION_MODEL\` opens its own issue"
+              echo "instead, so anything needing a decision is a separate notification."
+              echo ""
+              echo "Keep this issue open — closing it just makes the next run open a new one."
+            } > tracker.md
+            TRACKER=$(gh issue create \
+              --title "$TRACKER_TITLE" \
+              --body-file tracker.md \
+              --label "model-eval" \
+              | grep -oE '[0-9]+$' | tail -1)
+          fi
+
+          # A comment caps at 65536 characters; keep headroom for the notice.
+          # iconv -c drops the partial multibyte character a byte-wise cut can
+          # leave behind, which the API would otherwise reject.
+          head -c 60000 report.md | iconv -f utf-8 -t utf-8 -c > comment.md
+          if [ "$(wc -c < report.md)" -gt 60000 ]; then
+            printf '\n\n_Report truncated — see the full log at %s_\n' "$RUN_URL" >> comment.md
+          fi
+          gh issue comment "$TRACKER" --body-file comment.md
